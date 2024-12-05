@@ -1,0 +1,59 @@
+html.theme--purple {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+    --text: white;
+    --background: hsl(270, 45%, 20%) !important; /* Slightly darker purple */
+    --backgroundLight: hsl(270, 55%, 30%) !important; /* Slightly lighter purple */
+}
+
+html.theme--purple .css-175oi2r.r-13awgt0 {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+    color: white;
+}
+
+html.theme--purple #root nav {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+}
+
+html.theme--purple #root nav a:hover {
+    background-color: hsl(270, 45%, 20%) !important; /* Slightly darker purple */
+}
+
+html.theme--purple #root > div > div > div > div > main > div > div > div > div > div > div > div > div.css-175oi2r.r-1ljd8xs.r-13l2t4g.r-5laclt.r-33ulu8 {
+    background-color: hsl(270, 45%, 20%) !important; /* Slightly darker purple */
+}
+
+html.theme--purple #root > div > div > div > div > main > div > div > div > div > div > div > div > div:nth-child(3) > div > div.css-175oi2r.r-150rngu.r-18u37iz.r-16y2uox.r-1wbh5a2.r-lltvgl.r-buy8e9.r-agouwx.r-2eszeu > div {
+    background-color: hsl(270, 45%, 20%) !important; /* Slightly darker purple */
+}
+
+/* Back to top button */
+html.theme--purple #root > div > div > div > div > main > div > div > div > div > div > div > div > div.css-175oi2r.r-13awgt0 > div > button {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+    color: white;
+}
+
+/* Feeds button */
+html.theme--purple #root > div > div > div > div > main > div > div > div > div > div > div > div > div.css-175oi2r.r-1ljd8xs.r-13l2t4g.r-5laclt.r-33ulu8 > a {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+    color: white;
+}
+
+/* Right hand sidebar */
+html.theme--purple #root > div > div > div > div > div.css-175oi2r.r-196lrry.r-pm9dpa.r-1rnoaur.r-1xcajam.r-1ipicw7 {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+}
+
+/* Right hand sidebar search bg */
+html.theme--purple #root > div > div > div > div > div.css-175oi2r.r-196lrry.r-pm9dpa.r-1rnoaur.r-1xcajam.r-1ipicw7 > div > div.css-175oi2r.r-bnwqim.r-1ipicw7 {
+    background-color: hsl(270, 50%, 25%) !important; /* Light purple */
+}
+
+/* Right hand sidebar search input */
+html.theme--purple #root > div > div > div > div > div.css-175oi2r.r-196lrry.r-pm9dpa.r-1rnoaur.r-1xcajam.r-1ipicw7 > div > div.css-175oi2r.r-bnwqim.r-1ipicw7 > div > div > div:nth-child(3) {
+    background-color: hsl(270, 45%, 20%) !important; /* Slightly darker purple */
+}
+
+/* Center collumn hover */
+html.theme--purple #root > div > div > div > div > main > div > div > div > div > div > div > div.css-175oi2r.r-150rngu.r-eqz5dr.r-16y2uox.r-1wbh5a2.r-11yh6sk.r-1rnoaur.r-agouwx > div > div > a:nth-child(4):hover {
+    background-color: hsl(270, 45%, 20%) !important; /* Slightly darker purple */
+}

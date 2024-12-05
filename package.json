@@ -1,0 +1,65 @@
+{
+    "name": "bsky-desktop",
+    "version": "1.0.6",
+    "description": "A desktop app of bsky.app",
+    "main": "src/app/main.js",
+    "scripts": {
+        "start": "electron .",
+        "pack": "electron-builder --dir",
+        "dist": "electron-builder",
+        "rebuild": "electron-rebuild",
+        "build": "node ./build-app.js"
+    },
+    "author": {
+        "name": "oxmc",
+        "email": "oxmc7769.mail@gmail.com"
+    },
+    "license": "AGPL-3.0-only",
+    "devDependencies": {
+        "electron": "^29.4.6",
+        "electron-builder": "^24.13.3"
+    },
+    "dependencies": {
+        "@electron/asar": "^3.2.17",
+        "@electron/remote": "^2.1.2",
+        "adm-zip": "^0.5.12",
+        "axios": "^1.6.8",
+        "electron-window-state": "^5.0.3",
+        "log4js": "^6.9.1",
+        "node-notifier": "^10.0.0",
+        "v8-compile-cache": "^2.3.0"
+    },
+    "build": {
+        "appId": "com.oxmc.bskyDesktop",
+        "productName": "bskyDesktop",
+        "asarUnpack": [
+            "./node_modules/node-notifier/**/*"
+        ],
+        "artifactName": "bsky-desktop.${ext}",
+        "mac": {
+            "icon": "src/ui/images/logo.icns",
+            "category": "Network"
+        },
+        "linux": {
+            "target": [
+                "appimage"
+            ],
+            "icon": "src/ui/images/logo.png",
+            "category": "Network"
+        },
+        "win": {
+            "target": [
+                "nsis"
+            ],
+            "icon": "src/ui/images/logo.ico"
+        },
+        "protocols": [
+            {
+                "name": "bsky",
+                "schemes": [
+                    "bsky"
+                ]
+            }
+        ]
+    }
+}
