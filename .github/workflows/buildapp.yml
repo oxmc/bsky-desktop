@@ -2,16 +2,9 @@ name: Build and Release bsky-desktop
 
 on:
   push:
-    branches: [ $default-branch ]
-  pull_request:
-    branches: [ $default-branch ]
+    tags-ignore:
+      - '*beta*'
   workflow_dispatch:
-    inputs:
-      ermwattesigma:
-        description: "Test"
-        default: "Testing"
-        required: false
-        type: string
 
 
 concurrency:
@@ -28,12 +21,9 @@ jobs:
     steps:
       - name: Checkout Main
         uses: actions/checkout@v4.2.1
-        with:
-          path: main
-          submodules: recursive
-
+      
       - name: Install Dependencies
-        run: cd .. && npm i
+        run: npm install
 
       - name: Compile (For linux)
         id: build_package
