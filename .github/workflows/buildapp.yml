@@ -135,9 +135,9 @@ jobs:
           name: macos-artifacts
           path: dist/macos
 
-      - name: Get npm version action
-        id: npmv
-        uses: pchynoweth/action-get-npm-version@1.0.1
+      # - name: Get npm version action
+      #   id: npmv
+      #   uses: pchynoweth/action-get-npm-version@1.0.1
 
       - name: Upload Release
         id: create_release
