@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup node and npm
-        uses: actions/setup-node@master
+        uses: actions/setup-node@v3
         with:
           node-version: 16
 
@@ -35,16 +35,15 @@ jobs:
         run: npm install
 
       - name: Build (x64)
-        id: build_package_x64
         run: npm run build -- --arch x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build (arm64)
-        id: build_package_arm64
-        run: npm run build -- --arch arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-artifacts
+          path: dist/*.AppImage
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -57,7 +56,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup node and npm
-        uses: actions/setup-node@master
+        uses: actions/setup-node@v3
         with:
           node-version: 16
 
@@ -69,16 +68,15 @@ jobs:
         run: npm install
 
       - name: Build (x64)
-        id: build_package_x64
         run: npm run build -- --arch x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build (arm64)
-        id: build_package_arm64
-        run: npm run build -- --arch arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-artifacts
+          path: dist/*.exe
 
   build-macos:
     name: Build bsky-desktop (macOS)
@@ -91,7 +89,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup node and npm
-        uses: actions/setup-node@master
+        uses: actions/setup-node@v3
         with:
           node-version: 16
 
@@ -103,16 +101,15 @@ jobs:
         run: npm install
 
       - name: Build (x64)
-        id: build_package_x64
         run: npm run build -- --arch x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build (arm64)
-        id: build_package_arm64
-        run: npm run build -- --arch arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-artifacts
+          path: dist/*.dmg
 
   release:
     name: Create Release
@@ -120,8 +117,23 @@ jobs:
     needs: [build-linux, build-windows, build-macos]
 
     steps:
-      - name: Checkout git repo
-        uses: actions/checkout@v2
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-artifacts
+          path: dist/linux
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-artifacts
+          path: dist/windows
+
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-artifacts
+          path: dist/macos
 
       - name: Get npm version action
         id: npmv
