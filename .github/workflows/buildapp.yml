@@ -32,9 +32,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Compile (For linux)
+      - name: Build (x64)
         id: build_package
-        run: npm run build
+        run: npm run build -- --arch x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (arm64)
+        id: build_package
+        run: npm run build -- --arch arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,6 +58,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: stable
-          name: bsky-desktop build
+          tag_name: "v${{ steps.npmv.outputs.version }}"
+          name: "bsky-desktop v${{ steps.npmv.outputs.version }}"
           files: dist/bskyDesktop-*
