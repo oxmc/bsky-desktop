@@ -5,7 +5,14 @@ on:
     branches: [ $default-branch ]
   pull_request:
     branches: [ $default-branch ]
-  workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      ermwattesigma:
+        description: "Test"
+        default: "Testing"
+        required: false
+        type: string
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,7 +20,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build bsky-desktop
+    name: Build bsky-desktop (Linux)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,7 +37,7 @@ jobs:
 
       - name: Compile (For linux)
         id: build_package
-        run: npm run dev
+        run: npm run build
 
       - name: Upload Artifact
         if: ${{ inputs.upload_artifact }}
