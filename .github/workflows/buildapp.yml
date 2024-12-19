@@ -33,13 +33,13 @@ jobs:
         run: npm install
 
       - name: Build (x64)
-        id: build_package
+        id: build_package_x64
         run: npm run build -- --arch x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build (arm64)
-        id: build_package
+        id: build_package_arm64
         run: npm run build -- --arch arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
