@@ -2,10 +2,10 @@ name: Build and Release bsky-desktop
 
 on:
   push:
-    tags-ignore:
-      - '*beta*'
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
   workflow_dispatch:
-
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,14 +15,21 @@ jobs:
   build:
     name: Build bsky-desktop (Linux)
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Main
-        uses: actions/checkout@v4.2.1
-      
-      - name: Install Dependencies
+      - name: Checkout git repo
+        uses: actions/checkout@v2
+
+      - name: setup node and npm
+        uses: actions/setup-node@master
+        with:
+          node-version: 16
+
+      - name: Get npm version action
+        id: npmv
+        uses: pchynoweth/action-get-npm-version@1.0.1
+
+      - name: Install dependencies
         run: npm install
 
       - name: Compile (For linux)
