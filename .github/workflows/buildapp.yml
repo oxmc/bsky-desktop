@@ -43,7 +43,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: linux-artifacts
-          path: dist/*.AppImage
+          path: |
+            dist/*.AppImage
+            dist/latest-linux.yml
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -76,7 +78,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: windows-artifacts
-          path: dist/*.exe
+          path: |
+            dist/latest-windows.yml
+            dist/*.exe
 
   build-macos:
     name: Build bsky-desktop (macOS)
@@ -109,7 +113,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: macos-artifacts
-          path: dist/*.dmg
+          path: |
+            dist/latest-macos.yml
+            dist/*.dmg
 
   release:
     name: Create Release
@@ -152,5 +158,8 @@ jobs:
           name: "bsky-desktop v${{ steps.npmv.outputs.version }}"
           files: |
             dist/linux/*.AppImage
+            dist/linux/latest-linux.yml
             dist/windows/*.exe
+            dist/windows/latest-windows.yml
             dist/macos/*.dmg
+            dist/macos/latest-macos.yml
