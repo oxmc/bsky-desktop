@@ -52,4 +52,4 @@ jobs:
         with:
           tag_name: stable
           name: bsky-desktop build
-          files: dist/bskyDesktop-*-linux-x64
+          files: dist/bskyDesktop-*
