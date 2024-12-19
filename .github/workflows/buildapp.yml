@@ -1,0 +1,44 @@
+name: Build and Release bsky-desktop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build bsky-desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Main
+        uses: actions/checkout@v4.2.1
+        with:
+          path: main
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: npm i
+
+      - name: Compile (For linux)
+        id: build_package
+        run: npm run dev
+
+      - name: Upload Artifact
+        if: ${{ inputs.upload_artifact }}
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: bsky-desktop
+          path: ${{ github.workspace }}/dist/${{ steps.build_package.outputs.package }}
+          if-no-files-found: error
+
+      - name: Create Release
+        id: create_release
+        uses: qnblackcat/action-gh-release@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: Tag_Name
+          name: Name
+          files: dist/*.appimage
