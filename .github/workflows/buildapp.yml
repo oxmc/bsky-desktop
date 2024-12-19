@@ -33,7 +33,7 @@ jobs:
           submodules: recursive
 
       - name: Install Dependencies
-        run: npm i
+        run: cd .. && npm i
 
       - name: Compile (For linux)
         id: build_package
