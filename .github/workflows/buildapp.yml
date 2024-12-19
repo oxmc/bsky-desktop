@@ -35,6 +35,8 @@ jobs:
       - name: Compile (For linux)
         id: build_package
         run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Artifact
         if: ${{ inputs.upload_artifact }}
