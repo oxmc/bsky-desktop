@@ -38,13 +38,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Artifact
-        if: ${{ inputs.upload_artifact }}
-        uses: actions/upload-artifact@v4.4.3
-        with:
-          name: bsky-desktop
-          path: ${{ github.workspace }}/dist/${{ steps.build_package.outputs.package }}
-          if-no-files-found: error
+      # - name: Upload Artifact
+      #   if: ${{ inputs.upload_artifact }}
+      #   uses: actions/upload-artifact@v4.4.3
+      #   with:
+      #     name: bsky-desktop
+      #     path: ${{ github.workspace }}/dist/${{ steps.build_package.outputs.package }}
+      #     if-no-files-found: error
 
       - name: Create Release
         id: create_release
