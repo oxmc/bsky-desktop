@@ -117,6 +117,9 @@ jobs:
     needs: [build-linux, build-windows, build-macos]
 
     steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v2
+        
       - name: Download Linux Artifacts
         uses: actions/download-artifact@v3
         with:
@@ -134,11 +137,6 @@ jobs:
         with:
           name: macos-artifacts
           path: dist/macos
-      
-      - name: Setup node and npm
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16
 
       - name: Get npm version action
         id: npmv
