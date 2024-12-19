@@ -79,7 +79,7 @@ jobs:
         with:
           name: windows-artifacts
           path: |
-            dist/latest-windows.yml
+            dist/latest-win.yml
             dist/*.exe
 
   build-macos:
@@ -114,7 +114,7 @@ jobs:
         with:
           name: macos-artifacts
           path: |
-            dist/latest-macos.yml
+            dist/latest-mac.yml
             dist/*.dmg
 
   release:
@@ -160,6 +160,6 @@ jobs:
             dist/linux/*.AppImage
             dist/linux/latest-linux.yml
             dist/windows/*.exe
-            dist/windows/latest-windows.yml
+            dist/windows/latest-win.yml
             dist/macos/*.dmg
-            dist/macos/latest-macos.yml
+            dist/macos/latest-mac.yml
