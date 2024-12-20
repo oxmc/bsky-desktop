@@ -7,7 +7,7 @@ const openAboutWindow = require("./about-window/src/index").default;
 const badge = require('./badge');
 const contextMenu = require('./context-menu');
 const autoUpdater = require('./utils/auto-update');
-//const loadCRX = require('./utils/loadCRX');
+const loadCRX = require('./utils/loadCRX');
 const log4js = require("log4js");
 const path = require("path");
 const fs = require("fs");
@@ -36,6 +36,7 @@ global.paths = {
   temp: path.join(os.tmpdir(), global.appInfo.name),
 };
 global.paths.updateDir = path.join(global.paths.data, 'update');
+global.paths.extensions = path.join(global.paths.data, 'extensions');
 
 // URLs:
 global.urls = {
@@ -117,6 +118,12 @@ if (!fs.existsSync(global.paths.temp)) {
 if (!fs.existsSync(global.paths.updateDir)) {
   logger.info("Creating Update Directory");
   fs.mkdirSync(global.paths.updateDir, { recursive: true });
+};
+
+// Create extensions directory if it does not exist:
+if (!fs.existsSync(global.paths.extensions)) {
+  logger.info("Creating Extensions Directory");
+  fs.mkdirSync(global.paths.extensions, { recursive: true });
 };
 
 // improve performance on linux?
@@ -239,6 +246,34 @@ function createWindow() {
 
   // Badge count: (use mainWindow as that shows the badge on the taskbar)
   new badge(mainWindow, badgeOptions);
+
+  // Load extensions (.crx files):
+  logger.log("Checking for extensions");
+  const extensions = fs.readdirSync(global.paths.extensions).filter((file) => file.endsWith('.crx'));
+  if (extensions.length > 0) {
+    logger.log(`Unpacking ${extensions.length} extensions and loading them`);
+    extensions.forEach((extension) => {
+      loadCRX(path.join(global.paths.extensions, extension));
+    });
+  } else {
+    // Check for unpacked extensions:
+    const unpackedExtensions = fs.readdirSync(global.paths.extensions).filter((file) => fs.lstatSync(path.join(global.paths.extensions, file)).isDirectory());
+
+    // Check if the directory contains a manifest.json file
+    unpackedExtensions.forEach((extension) => {
+      const manifestPath = path.join(global.paths.extensions, extension, 'manifest.json');
+      if (fs.existsSync(manifestPath)) {
+        logger.log(`Loading unpacked extension: ${extension}`);
+        session.defaultSession.loadExtension(path.join(global.paths.extensions, extension)).then(({ id }) => {
+          logger.log(`Extension loaded with ID: ${id}`);
+        }).catch((error) => {
+          logger.error(`Failed to load extension: ${error}`);
+        });
+      } else {
+        logger.warn(`Skipping directory ${extension} as it does not contain a manifest.json file`);
+      };
+    });
+  };
 
   logger.log("Main Window Created, Showing splashscreen");
   splash.show();

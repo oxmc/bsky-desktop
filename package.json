@@ -1,6 +1,6 @@
 {
     "name": "bsky-desktop",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "description": "A desktop app of bsky.app",
     "main": "src/app/main.js",
     "scripts": {

@@ -45,6 +45,10 @@ jobs:
 
       - name: Check the appimage(s)
         run: ./appimagelint-x86_64.AppImage dist/*.AppImage
+      
+      - name: Generate checksum
+        run: |
+          sha256sum dist/*.AppImage > sha256sum.txt
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -54,16 +58,7 @@ jobs:
           path: |
             dist/*.AppImage
             dist/latest*.yml
-
-      - name: Generate checksum
-        run: |
-          sha256sum dist/*.AppImage > sha256sum.txt
-
-      - name: Upload checksums
-        uses: actions/upload-artifact@v4
-        with:
-          name: checksums
-          path: sha256sum.txt
+            sha256sum.txt
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -89,6 +84,10 @@ jobs:
 
       - name: Build (arm64)
         run: npm run build -- --arch arm64
+      
+      - name: Generate checksum
+        run: |
+          sha256sum dist/*.exe > sha256sum.txt
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -98,6 +97,7 @@ jobs:
           path: |
             dist/*.exe
             dist/latest*.yml
+            sha256sum.txt
 
   build-macos:
     name: Build bsky-desktop (macOS)
@@ -123,6 +123,11 @@ jobs:
 
       - name: Build (arm64)
         run: npm run build -- --arch arm64
+      
+      - name: Generate checksum
+        run: |
+          sha256sum dist/*.dmg > sha256sum.txt
+        #  sha256sum dist/*.pkg >> sha256sum.txt
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
@@ -132,6 +137,7 @@ jobs:
           path: |
             dist/*.dmg
             dist/latest*.yml
+            sha256sum.txt
 
   release:
     name: Create Release
@@ -170,11 +176,10 @@ jobs:
 
       - name: Display structure of downloaded files
         run: ls -R dist
-
-      - name: Merge latest .ymls
-        uses: mikefarah/yq@v4.44.6
-        with:
-          cmd: yq eval-all 'select(fileIndex == 0) * select(fileIndex > 0)' dist/*/*.yml > merged.yml
+      
+      - name: Combine checksums
+        run: |
+          cat dist/linux/sha256sum.txt dist/windows/sha256sum.txt dist/macos/sha256sum.txt > sha256sums.txt
 
       - name: Upload Release
         id: create_release
@@ -187,7 +192,7 @@ jobs:
             dist/linux/*.AppImage
             dist/windows/*.exe
             dist/macos/*.dmg
-            merged.yml
+            sha256sums.txt
 
   aur:
     name: Publish to AUR
@@ -200,20 +205,17 @@ jobs:
       - name: Checkout git repo
         uses: actions/checkout@v3
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install jq -y
-
-      - name: Download checksums
+      - name: Download linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: checksums
-          path: .
+          name: linux-artifacts
+          path: dist/linux
 
       - name: List downloaded files
-        run: ls -R
+        run: ls -R dist
 
       - name: Show content of sha256sum.txt
-        run: cat sha256sum.txt
+        run: cat dist/linux/sha256sum.txt
 
       - name: Get app version
         id: version
@@ -221,7 +223,7 @@ jobs:
 
       - name: Extract checksum from sha256sum.txt and change build version
         run: |
-          new_checksum=$(awk 'NR==1 { print $1 }' ./sha256sum.txt)
+          new_checksum=$(awk 'NR==1 { print $1 }' ./dist/linux/sha256sum.txt)
           sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
           sed -i "s/^pkgver=.*$/pkgver=${{ steps.version.outputs.version }}/" ./build/PKGBUILD
 

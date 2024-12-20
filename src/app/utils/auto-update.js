@@ -107,13 +107,14 @@ function checkForUpdates() {
                     // System is ARM64 (mac-arm64)
                     macArch = 'arm64';
                 } else {
-                    // System is Intel (mac-x64)
-                    macArch = 'intel';
+                    // System is x64 (mac-x64)
+                    macArch = 'x64';
                 }
             } else {
-                // macOS 10 is mostly Intel, but some versions are ARM64
-                macArch = 'intel';
+                // macOS 10 is mostly x64, but some versions are ARM64
+                macArch = 'x64';
             }
+            logger.log('System architecture:', macArch);
             // Check for updates, and if there are updates, download and install them
             logger.log('Checking for updates (mac)...');
 
@@ -122,7 +123,7 @@ function checkForUpdates() {
             const command = `sudo installer -pkg ${pkgPath} -target /`;
 
             // Spawn a new shell
-            const shellProcess = spawn('sh', ['-c', command], {
+            /*const shellProcess = spawn('sh', ['-c', command], {
                 stdio: 'inherit', // Pipe input/output to/from the shell
             });
 
@@ -136,7 +137,7 @@ function checkForUpdates() {
                 } else {
                     console.error(`Shell process exited with code ${code}.`);
                 }
-            });
+            });*/
         } else {
             // macOS versions before 10 are not supported
             logger.error('macOS versions before 10 are not supported, not updating...');

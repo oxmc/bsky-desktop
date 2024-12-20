@@ -70,7 +70,7 @@ package() {
 [Desktop Entry]
 Name=Bluesky Desktop
 Comment=Bluesky Desktop Client
-Exec=/usr/bin/bsky-desktop
+Exec=/usr/bin/bsky-desktop %u
 Icon=bsky-desktop
 Terminal=false
 Type=Application
