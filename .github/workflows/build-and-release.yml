@@ -2,9 +2,9 @@ name: Build and Release bsky-desktop
 
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [$default-branch]
   pull_request:
-    branches: [ $default-branch ]
+    branches: [$default-branch]
   workflow_dispatch:
 
 concurrency:
@@ -45,6 +45,16 @@ jobs:
           path: |
             dist/*.AppImage
             dist/latest*.yml
+
+      - name: Generate checksum
+        run: |
+          sha256sum dist/*.AppImage > sha256sum.txt
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: sha256sum.txt
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -124,11 +134,11 @@ jobs:
     steps:
       - name: Checkout git repo
         uses: actions/checkout@v3
-      
+
       - name: Get app version
         id: version
         uses: pchynoweth/action-get-npm-version@1.1.1
-        
+
       - name: Download Linux Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -146,7 +156,7 @@ jobs:
         with:
           name: macos-artifacts
           path: dist/macos
-      
+
       - name: Display structure of downloaded files
         run: ls -R dist
 
@@ -167,3 +177,36 @@ jobs:
             dist/windows/*.exe
             dist/macos/*.dmg
             dist/combined.yml
+
+  aur:
+    name: Publish to AUR
+    runs-on: ubuntu-latest
+    needs: release
+    env:
+      AUR_TOKEN: ${{ secrets.AUR_TOKEN }}
+
+    steps:
+      - name: Checkout git repo
+        uses: actions/checkout@v3
+
+      - name: Download checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: checksums
+          path: ./sha256sum.txt
+
+      - name: Extract checksum from sha256sum.txt
+        run: |
+          new_checksum=$(awk 'NR==1 { print $1 }' ./sha256sum.txt)
+          sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
+
+      - name: Publish AUR package
+        uses: KSXGitHub/github-actions-deploy-aur@3.0.1
+        with:
+          pkgname: bskydesktop
+          pkgbuild: ./build/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: New Version
+          ssh_keyscan_types: rsa,ecdsa,ed25519
