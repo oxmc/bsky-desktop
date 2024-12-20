@@ -197,9 +197,12 @@ jobs:
           name: checksums
           path: ./sha256sum.txt
 
+      - name: Get app version
+        id: version
+        uses: pchynoweth/action-get-npm-version@1.1.1
       - name: Extract checksum from sha256sum.txt and change build version
         run: |
-          echo releasever
+          echo ${{ steps.version.outputs.version }}
           new_checksum=$(awk 'NR==1 { print $1 }' ./sha256sum.txt)
           sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
           sed -i "s/^pkgver=.*$/pkgver=${{ needs.release.outputs.version_tag }}/" ./build/PKGBUILD
