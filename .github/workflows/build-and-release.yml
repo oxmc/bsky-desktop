@@ -174,7 +174,7 @@ jobs:
       - name: Merge latest .ymls
         uses: mikefarah/yq@v4.44.6
         with:
-          cmd: yq eval-all '. as $item ireduce ({}; . * $item )' dist/*/*.yml > merged.yml
+          cmd: yq eval-all 'select(fileIndex == 0) * select(fileIndex > 0)' dist/*/*.yml > merged.yml
 
       - name: Upload Release
         id: create_release
