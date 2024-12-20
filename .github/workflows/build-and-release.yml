@@ -204,14 +204,14 @@ jobs:
           sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
           sed -i "s/^pkgver=.*$/pkgver=${{ needs.release.outputs.version_tag }}/" ./build/PKGBUILD
 
-      - name: Publish AUR package
-        if: false
-        uses: KSXGitHub/github-actions-deploy-aur@3.0.1
-        with:
-          pkgname: bskydesktop
-          pkgbuild: ./build/PKGBUILD
-          commit_username: ${{ secrets.AUR_USERNAME }}
-          commit_email: ${{ secrets.AUR_EMAIL }}
-          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: New Version
-          ssh_keyscan_types: rsa,ecdsa,ed25519
+#      - name: Publish AUR package
+#        if: false
+#        uses: KSXGitHub/github-actions-deploy-aur@3.0.1
+#        with:
+#          pkgname: bskydesktop
+#          pkgbuild: ./build/PKGBUILD
+#          commit_username: ${{ secrets.AUR_USERNAME }}
+#          commit_email: ${{ secrets.AUR_EMAIL }}
+#          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+#          commit_message: New Version
+#          ssh_keyscan_types: rsa,ecdsa,ed25519
