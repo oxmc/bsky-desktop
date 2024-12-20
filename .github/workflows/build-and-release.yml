@@ -37,8 +37,9 @@ jobs:
       - name: Build (arm64)
         run: npm run build -- --arch arm64
       
-      - name: Download appimagelint
+      - name: Download appimagelint and its deps
         run: |
+          sudo apt install fuse -y
           wget https://github.com/TheAssassin/appimagelint/releases/download/continuous/appimagelint-x86_64.AppImage
           chmod +x appimagelint-x86_64.AppImage
       
