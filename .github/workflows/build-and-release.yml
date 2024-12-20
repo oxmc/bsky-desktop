@@ -178,9 +178,8 @@ jobs:
             dist/macos/*.dmg
             merged.yml
 
-      - name: Set version output
-        run: echo "releasever=${{ steps.create_release.outputs.tag_name }}" >> $GITHUB_ENV
-
+      outputs:
+        version_tag: ${{ steps.version.outputs.version }}
   aur:
     name: Publish to AUR
     runs-on: ubuntu-latest
@@ -209,9 +208,10 @@ jobs:
 
       - name: Extract checksum from sha256sum.txt and change build version
         run: |
+          echo releasever
           new_checksum=$(awk 'NR==1 { print $1 }' ./sha256sum.txt)
           sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
-          sed -i "s|pkgver=\"\"|pkgver=\"$releasever\"|" ./build/PKGBUILD
+          sed -i "s/^pkgver=.*$/pkgver=${{ needs.release.outputs.version_tag }}/" ./build/PKGBUILD
 
       - name: Publish AUR package
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
