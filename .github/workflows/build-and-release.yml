@@ -128,6 +128,8 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build-linux, build-windows, build-macos]
+    outputs:
+      version_tag: ${{ steps.version.outputs.version }}
     env:
       GITHUB_TOKEN: ${{ secrets.GHT }}
 
@@ -178,8 +180,6 @@ jobs:
             dist/macos/*.dmg
             merged.yml
 
-      outputs:
-        version_tag: ${{ steps.version.outputs.version }}
   aur:
     name: Publish to AUR
     runs-on: ubuntu-latest
