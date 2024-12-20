@@ -36,6 +36,15 @@ jobs:
 
       - name: Build (arm64)
         run: npm run build -- --arch arm64
+      
+      - name: Download appimagelint and its deps
+        run: |
+          sudo apt install fuse -y
+          wget https://github.com/TheAssassin/appimagelint/releases/download/continuous/appimagelint-x86_64.AppImage
+          chmod +x appimagelint-x86_64.AppImage
+      
+      - name: Check the appimage(s)
+        run: ./appimagelint-x86_64.AppImage dist/*.AppImage
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
