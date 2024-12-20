@@ -36,13 +36,13 @@ jobs:
 
       - name: Build (arm64)
         run: npm run build -- --arch arm64
-      
+
       - name: Download appimagelint and its deps
         run: |
           sudo apt install fuse -y
           wget https://github.com/TheAssassin/appimagelint/releases/download/continuous/appimagelint-x86_64.AppImage
           chmod +x appimagelint-x86_64.AppImage
-      
+
       - name: Check the appimage(s)
         run: ./appimagelint-x86_64.AppImage dist/*.AppImage
 
@@ -208,19 +208,22 @@ jobs:
         with:
           name: checksums
           path: .
-      
+
       - name: List downloaded files
         run: ls -R
 
       - name: Show content of sha256sum.txt
         run: cat sha256sum.txt
 
+      - name: Get app version
+        id: version
+        uses: pchynoweth/action-get-npm-version@1.1.1
+
       - name: Extract checksum from sha256sum.txt and change build version
         run: |
-          echo releasever
           new_checksum=$(awk 'NR==1 { print $1 }' ./sha256sum.txt)
           sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
-          sed -i "s/^pkgver=.*$/pkgver=${{ needs.release.outputs.version_tag }}/" ./build/PKGBUILD
+          sed -i "s/^pkgver=.*$/pkgver=${{ steps.version.outputs.version }}/" ./build/PKGBUILD
 
       - name: Publish AUR package
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
