@@ -39,7 +39,7 @@ jobs:
       
       - name: Download appimagelint and its deps
         run: |
-          sudo apt install libfuse -y
+          sudo apt install fuse -y
           wget https://github.com/TheAssassin/appimagelint/releases/download/continuous/appimagelint-x86_64.AppImage
           chmod +x appimagelint-x86_64.AppImage
       
