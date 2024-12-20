@@ -46,7 +46,7 @@ jobs:
           name: linux-artifacts
           path: |
             dist/*.AppImage
-            dist/*.yml
+            dist/latest*.yml
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -82,7 +82,7 @@ jobs:
           name: windows-artifacts
           path: |
             dist/*.exe
-            dist/*.yml
+            dist/latest*.yml
 
   build-macos:
     name: Build bsky-desktop (macOS)
@@ -118,7 +118,7 @@ jobs:
           name: macos-artifacts
           path: |
             dist/*.dmg
-            dist/*.yml
+            dist/latest*.yml
 
   release:
     name: Create Release
@@ -158,7 +158,7 @@ jobs:
 
       - name: Upload Release
         id: create_release
-        uses: softprops/action-gh-release@v2.2.0
+        uses: softprops/action-gh-release@v2.1.0
         with:
           tag_name: "v${{ steps.version.outputs.version }}"
           name: "bsky-desktop v${{ steps.version.outputs.version }}"
