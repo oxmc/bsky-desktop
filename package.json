@@ -38,6 +38,10 @@
         ],
         "artifactName": "bsky-desktop.${ext}",
         "mac": {
+            "target": [
+                "dmg",
+                "pkg"
+            ],
             "icon": "src/ui/images/logo.icns",
             "category": "Network"
         },
@@ -45,7 +49,7 @@
             "target": [
                 "appimage"
             ],
-            "icon": "src/ui/images/logo.png",
+            "icon": "src/ui/images/icons",
             "category": "Network"
         },
         "win": {

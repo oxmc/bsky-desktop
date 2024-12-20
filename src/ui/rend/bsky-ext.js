@@ -374,6 +374,15 @@ const BskyExt = {
                 },
                 "regex": /discord\.com\/invite\/([a-zA-Z0-9_]+)/
             },
+            "discord_profile": {
+                "name": "Discord",
+                "type": "social",
+                "icon": "fab fa-discord",
+                "brand": {
+                    "color": "#7289DA",
+                },
+                "regex": /discord\.com\/users\/([a-zA-Z0-9_]+)/
+            },
             "discord.gg": {
                 "name": "Discord",
                 "type": "messaging",
@@ -473,6 +482,33 @@ const BskyExt = {
                 },
                 "regex": /irc:\/\/([a-zA-Z0-9_]+)/
             },
+            "itchio": {
+                "name": "Itch.io",
+                "type": "content",
+                "icon": "fab fa-itch-io",
+                "brand": {
+                    "color": "#FA5C5C",
+                },
+                "regex": /([a-zA-Z0-9_]+)\.itch\.io/
+            },
+            "etsy_shop": {
+                "name": "Etsy",
+                "type": "content",
+                "icon": "fab fa-etsy",
+                "brand": {
+                    "color": "#D5641C",
+                },
+                "regex": /etsy\.com\/shop\/([a-zA-Z0-9_]+)/
+            },
+            "etsy_user": {
+                "name": "Etsy",
+                "type": "content",
+                "icon": "fab fa-etsy",
+                "brand": {
+                    "color": "#D5641C",
+                },
+                "regex": /([a-zA-Z0-9_]+)\.etsy\.com/
+            },
             "email": {
                 "name": "Email",
                 "type": "messaging",
@@ -498,7 +534,43 @@ const BskyExt = {
                 "brand": {
                     "color": "#1DA1F2",
                 },
-                "regex": /twitter\.com\/([a-zA-Z0-9_]+)/
+                "regex": /(twitter\.com|x\.com)\/([a-zA-Z0-9_]+)\/?$/
+            },
+            "xbox": {
+                "name": "Xbox",
+                "type": "social",
+                "icon": "fab fa-xbox",
+                "brand": {
+                    "color": "#107C10",
+                },
+                "regex": /xbox\.com\/([a-zA-Z0-9_]+)/
+            },
+            "playstation": {
+                "name": "PlayStation",
+                "type": "social",
+                "icon": "fab fa-playstation",
+                "brand": {
+                    "color": "#003087",
+                },
+                "regex": /playstation\.com\/([a-zA-Z0-9_]+)/
+            },
+            "steam": {
+                "name": "Steam",
+                "type": "content",
+                "icon": "fab fa-steam",
+                "brand": {
+                    "color": "#000000",
+                },
+                "regex": /steamcommunity\.com\/id\/([a-zA-Z0-9_]+)/
+            },
+            "tiktok": {
+                "name": "TikTok",
+                "type": "social",
+                "icon": "fab fa-tiktok",
+                "brand": {
+                    "color": "#000000",
+                },
+                "regex": /tiktok\.com\/@([a-zA-Z0-9_]+)/
             },
             "instagram": {
                 "name": "Instagram",
@@ -727,6 +799,72 @@ const BskyExt = {
                     "border": "#7289DA"
                 }
             }
+        },
+
+        /**
+         * @constant {Object} linkStylesOverrides - Style overrides for specific link types
+         */
+        linkStylesOverrides: {
+            "bluesky": {
+                "default": {
+                    "color": "rgb(0, 133, 255)",
+                    "background": "#0000",
+                    "border": "#0000",
+                },
+                "hover": {
+                    "color": "#fff",
+                    "background": "#0000",
+                    "border": "#0000"
+                }
+            },
+            "discord": {
+                "default": {
+                    "color": "#FFFFFF",
+                    "background": "#7289DA",
+                    "border": "#7289DA",
+                },
+                "hover": {
+                    "color": "#7289DA",
+                    "background": "#FFFFFF",
+                    "border": "#7289DA"
+                }
+            },
+            "linktree": {
+                "default": {
+                    "color": "#FFFFFF",
+                    "background": "#39e09b",
+                    "border": "#39e09b",
+                },
+                "hover": {
+                    "color": "#39e09b",
+                    "background": "#FFFFFF",
+                    "border": "#39e09b"
+                }
+            },
+            "carrd": {
+                "default": {
+                    "color": "#FFFFFF",
+                    "background": "#2C2F33",
+                    "border": "#2C2F33",
+                },
+                "hover": {
+                    "color": "#2C2F33",
+                    "background": "#FFFFFF",
+                    "border": "#2C2F33"
+                }
+            },
+            "dribbble": {
+                "default": {
+                    "color": "#FFFFFF",
+                    "background": "#EA4C89",
+                    "border": "#EA4C89",
+                },
+                "hover": {
+                    "color": "#EA4C89",
+                    "background": "#FFFFFF",
+                    "border": "#EA4C89"
+                }
+            },
         },
 
         /**
@@ -1109,7 +1247,7 @@ const BskyExt = {
             let header = bio.closest("[data-testid='profileView']");
 
             // Get the profile header button group element
-            let buttonGroup = header.querySelector('[role="button"]').parentElement;
+            let buttonGroup = header.querySelector("div.css-175oi2r.r-2llsf > div:nth-child(1) > div > div:nth-child(2) > div.css-175oi2r.r-12vffkv");
 
             // Check if the profile header button group element exists
             if (!buttonGroup) {

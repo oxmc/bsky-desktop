@@ -79,33 +79,75 @@ function asarUpdate() {
 }
 
 function checkForUpdates() {
+    // Current system information
+    logger.log('Current system information:', sys.platform, sys.getVersion());
+
     // Check if the current system is Windows
     if (sys.isWin()) {
         // Check if the system is before Windows 10
-        if (sys.laterThan('10.0.0')) {
-            // Check for updates, and if there are updates, download and install them
-            logger.log('Checking for updates (win)...');
-        } else {
+        if (sys.earlierThan('10.0.0')) {
             // Windows 10 and above are supported, but windows 7 and 8 are not supported
             logger.error('Windows 7 and 8 are not supported, please upgrade to Windows 10 or above, not updating...');
+        } else {
+            // Check for updates, and if there are updates, download and install them
+            logger.log('Checking for updates (win)...');
         }
     }
 
     // Check if the current system is macOS
     if (sys.isMac()) {
-        // Check if the current version is later than macOS 10.15.0
-        if (sys.laterThan('10.15.0')) {
+        let macArch = '';
+        // Check the current version of macOS, and whether we can use the pkg installer
+        if (sys.laterThan('10.0.0')) {
+            // Check if system is after macOS 10 (11, 12, etc.)
+            if (sys.laterThan('11.0.0')) {
+                // macOS 11 and above support ARM64, check if system is ARM64
+                logger.log('Checkking system architecture...');
+                if (sys.isARM64()) {
+                    // System is ARM64 (mac-arm64)
+                    macArch = 'arm64';
+                } else {
+                    // System is Intel (mac-x64)
+                    macArch = 'intel';
+                }
+            } else {
+                // macOS 10 is mostly Intel, but some versions are ARM64
+                macArch = 'intel';
+            }
             // Check for updates, and if there are updates, download and install them
-            logger.log('Checking for updates (macOS)...');
+            logger.log('Checking for updates (mac)...');
+
+            // Run the .pkg installer
+            const pkgPath = path.join(global.paths.updateDir, 'bsky-desktop.pkg');
+            const command = `sudo installer -pkg ${pkgPath} -target /`;
+
+            // Spawn a new shell
+            const shellProcess = spawn('sh', ['-c', command], {
+                stdio: 'inherit', // Pipe input/output to/from the shell
+            });
+
+            shellProcess.on('error', (err) => {
+                console.error('Failed to spawn shell:', err);
+            });
+
+            shellProcess.on('close', (code) => {
+                if (code === 0) {
+                    console.log('Update installed successfully.');
+                } else {
+                    console.error(`Shell process exited with code ${code}.`);
+                }
+            });
         } else {
-            // macOS 10.15 and above are supported, but macOS 10.14 and below are not supported
-            logger.error('macOS 10.14 and below are not supported, please upgrade to macOS 10.15 or above, not updating...');
+            // macOS versions before 10 are not supported
+            logger.error('macOS versions before 10 are not supported, not updating...');
         }
     }
 
     // Check if the current system is Linux
     if (sys.isLinux()) {
         // Check for updates, and if there are updates, download and install them (no system version check)
+        // Linux versions use AppImage, so we instead need to check for a new asar file so that the app can
+        // load the new asar instead of the packaged one (or even just delete the old appimage and download a new one)
         logger.log('Checking for updates (linux)...');
         asarUpdate();
     }
