@@ -39,7 +39,7 @@ jobs:
 
       - name: Download appimagelint and its deps
         run: |
-          sudo apt install fuse -y
+          sudo apt update && sudo apt install fuse -y
           wget https://github.com/TheAssassin/appimagelint/releases/download/continuous/appimagelint-x86_64.AppImage
           chmod +x appimagelint-x86_64.AppImage
 
@@ -48,7 +48,7 @@ jobs:
       
       - name: Generate checksum
         run: |
-          sha256sum dist/*.AppImage > sha256sum.txt
+          sha256sum dist/*.AppImage > dist/sha256sum.txt
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -58,7 +58,7 @@ jobs:
           path: |
             dist/*.AppImage
             dist/latest*.yml
-            sha256sum.txt
+            dist/sha256sum.txt
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -87,7 +87,7 @@ jobs:
       
       - name: Generate checksum
         run: |
-          sha256sum dist/*.exe > sha256sum.txt
+          sha256sum dist/*.exe > dist/sha256sum.txt
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -97,7 +97,7 @@ jobs:
           path: |
             dist/*.exe
             dist/latest*.yml
-            sha256sum.txt
+            dist/sha256sum.txt
 
   build-macos:
     name: Build bsky-desktop (macOS)
@@ -126,8 +126,7 @@ jobs:
       
       - name: Generate checksum
         run: |
-          shasum -a 256 dist/*.dmg > sha256sum.txt
-        #  shasum -a 256 dist/*.pkg >> sha256sum.txt
+          shasum -a 256 dist/*.dmg > dist/sha256sum.txt
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
@@ -137,7 +136,7 @@ jobs:
           path: |
             dist/*.dmg
             dist/latest*.yml
-            sha256sum.txt
+            dist/sha256sum.txt
 
   release:
     name: Create Release
