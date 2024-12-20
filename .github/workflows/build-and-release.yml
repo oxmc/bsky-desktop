@@ -205,6 +205,7 @@ jobs:
           sed -i "s/^pkgver=.*$/pkgver=${{ needs.release.outputs.version_tag }}/" ./build/PKGBUILD
 
       - name: Publish AUR package
+        if: false
         uses: KSXGitHub/github-actions-deploy-aur@3.0.1
         with:
           pkgname: bskydesktop
