@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, ipcRenderer, Tray, Menu, protocol, session } = require("electron");
+const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, Tray, Menu, protocol, session } = require("electron");
 const electronremote = require("@electron/remote/main");
 //const asar = require('@electron/asar');
 const windowStateKeeper = require("electron-window-state");
@@ -6,7 +6,7 @@ const { setupTitlebar, attachTitlebarToWindow } = require("./titlebar/main");
 const openAboutWindow = require("./about-window/src/index").default;
 const badge = require('./badge');
 const contextMenu = require('./context-menu');
-const asarUpdater = require('./utils/asarUpdater');
+const autoUpdater = require('./utils/auto-update');
 //const loadCRX = require('./utils/loadCRX');
 const log4js = require("log4js");
 const path = require("path");
@@ -483,64 +483,7 @@ app.whenReady().then(() => {
 
     // Initialize the updater:
     logger.log("Initializing Updater");
-    asarUpdater.init();
-
-    // updater events:
-    asarUpdater.on('available', (task) => {
-      //console.log('Update availible for', task)
-      logger.log("Update availible for", task.name);
-      global.PageView.webContents.send('ui:notif', JSON.stringify({ title: 'Update', message: 'An update is available' }));
-      if (global.splash) global.splash.webContents.send('ui:progtext', { title: 'Update Available', subtitle: 'An update is available! Downloading...' });
-      global.isUpdating = true;
-    });
-    asarUpdater.on('not-available', (task) => {
-      //console.log('not-available', task);
-      logger.log("No Updates Available for", task);
-    });
-    asarUpdater.on('progress', (task, p) => {
-      console.log(task.name, p);
-      if (global.splash) global.splash.webContents.send('ui:progtext', { title: 'Downloading Update', subtitle: 'Downloading update...' });
-      if (global.splash) global.splash.webContents.send('ui:progbar', { reason: 'update', prog: p });
-    });
-    asarUpdater.on('downloaded', (task) => {
-      //console.log('downloaded', task);
-      logger.log("Downloaded Update for,", task.name);
-      global.PageView.webContents.send('ui:notif', JSON.stringify({ title: 'Update Downloaded', message: 'Restarting to apply update...' }));
-      if (global.splash) global.splash.webContents.send('ui:progtext', { title: 'Update Downloaded', subtitle: 'Restarting to apply update...' });
-    });
-    asarUpdater.on('completed', (manifest, tasks) => {
-      console.log('completed', manifest, tasks);
-      if (tasks.length === 0) {
-        setTimeout(() => {
-          logger.log("Quitting and Installing Update");
-          asarUpdater.quitAndInstall();
-        }, 5000);
-      };
-      //app.quit()
-    });
-    asarUpdater.on('error', (err) => {
-      //console.error(err);
-      logger.error(err);
-      //app.quit()
-    });
-
-    // Set the feed URL (only works in packaged app):
-    if (app.isPackaged) {
-      logger.log("Setting Feed URL for app.asar");
-      asarUpdater.setFeedURL(path.join(global.paths.app_root), 'https://cdn.oxmc.me/internal/bsky-desktop/update/core');
-    };
-
-    //Check for updates:
-    logger.log("Checking for Updates");
-    if (app.isPackaged) {
-      const UPDATE_CHECK = 1000 * 60 * 60 * 4 // 4 hours
-      setInterval(() => {
-        //asarUpdater.checkForUpdates();
-      }, UPDATE_CHECK);
-      //asarUpdater.checkForUpdates();
-    } else {
-      logger.warn("Not checking for updates as app is not packaged");
-    };
+    autoUpdater();
 
     // Handle ipc for render:
     ipcMain.on('close-app', (event, arg) => {

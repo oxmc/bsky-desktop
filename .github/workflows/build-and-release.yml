@@ -15,8 +15,6 @@ jobs:
   build-linux:
     name: Build bsky-desktop (Linux)
     runs-on: ubuntu-latest
-    outputs:
-      artifact: ${{ steps.upload-artifact.outputs.artifact }}
     env:
       ext: "AppImage"
       GITHUB_TOKEN: ${{ secrets.GHT }}
@@ -51,8 +49,6 @@ jobs:
   build-windows:
     name: Build bsky-desktop (Windows)
     runs-on: windows-latest
-    outputs:
-      artifact: ${{ steps.upload-artifact.outputs.artifact }}
     env:
       ext: "exe"
       GITHUB_TOKEN: ${{ secrets.GHT }}
@@ -87,8 +83,6 @@ jobs:
   build-macos:
     name: Build bsky-desktop (macOS)
     runs-on: macos-latest
-    outputs:
-      artifact: ${{ steps.upload-artifact.outputs.artifact }}
     env:
       ext: "dmg"
       GITHUB_TOKEN: ${{ secrets.GHT }}
@@ -129,7 +123,7 @@ jobs:
 
     steps:
       - name: Checkout git repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       
       - name: Get app version
         id: version
@@ -156,6 +150,11 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R dist
 
+      - name: Merge latest .ymls
+        uses: mikefarah/yq@v4.44.6
+        with:
+          cmd: yq ea '. as $item ireduce ({}; . * $item )' dist/*/*.yml > dist/combined.yml
+
       - name: Upload Release
         id: create_release
         uses: softprops/action-gh-release@v2.1.0
@@ -167,3 +166,4 @@ jobs:
             dist/linux/*.AppImage
             dist/windows/*.exe
             dist/macos/*.dmg
+            dist/combined.yml

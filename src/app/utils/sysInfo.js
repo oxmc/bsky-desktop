@@ -59,6 +59,8 @@ class SystemInfo {
   }
 }
 
+module.exports = SystemInfo;
+
 // Usage Example
 //const sys = new SystemInfo();
 //console.log(`Is Windows: ${sys.isWin()}`);
