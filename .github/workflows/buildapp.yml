@@ -18,7 +18,7 @@ jobs:
     outputs:
       artifact: ${{ steps.upload-artifact.outputs.artifact }}
     env:
-      ext: ".AppImage"
+      ext: "AppImage"
       GITHUB_TOKEN: ${{ secrets.GHT }}
 
     steps:
@@ -46,7 +46,7 @@ jobs:
           name: linux-artifacts
           path: |
             dist/*.AppImage
-            dist/latest-linux.yml
+            dist/*.yml
 
   build-windows:
     name: Build bsky-desktop (Windows)
@@ -54,7 +54,7 @@ jobs:
     outputs:
       artifact: ${{ steps.upload-artifact.outputs.artifact }}
     env:
-      ext: ".exe"
+      ext: "exe"
       GITHUB_TOKEN: ${{ secrets.GHT }}
 
     steps:
@@ -82,7 +82,7 @@ jobs:
           name: windows-artifacts
           path: |
             dist/*.exe
-            dist/latest-windows.yml
+            dist/*.yml
 
   build-macos:
     name: Build bsky-desktop (macOS)
@@ -90,7 +90,7 @@ jobs:
     outputs:
       artifact: ${{ steps.upload-artifact.outputs.artifact }}
     env:
-      ext: ".dmg"
+      ext: "dmg"
       GITHUB_TOKEN: ${{ secrets.GHT }}
 
     steps:
@@ -118,7 +118,7 @@ jobs:
           name: macos-artifacts
           path: |
             dist/*.dmg
-            dist/latest-macos.yml
+            dist/*.yml
 
   release:
     name: Create Release
@@ -133,7 +133,7 @@ jobs:
       
       - name: Get app version
         id: version
-        uses: pchynoweth/action-get-npm-version@1.0.1
+        uses: pchynoweth/action-get-npm-version@1.1.1
         
       - name: Download Linux Artifacts
         uses: actions/download-artifact@v4
@@ -158,14 +158,12 @@ jobs:
 
       - name: Upload Release
         id: create_release
-        uses: qnblackcat/action-gh-release@master
+        uses: softprops/action-gh-release@v2.2.0
         with:
           tag_name: "v${{ steps.version.outputs.version }}"
           name: "bsky-desktop v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
           files: |
             dist/linux/*.AppImage
-            dist/linux/latest-linux.yml
             dist/windows/*.exe
-            dist/windows/latest-windows.yml
             dist/macos/*.dmg
-            dist/macos/latest-macos.yml
