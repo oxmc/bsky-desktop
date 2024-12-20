@@ -44,11 +44,11 @@ global.urls = {
 
 // Settings urls:
 global.settings = {
-  general: `${global.urls.main}/settings`,
-  account: `${global.urls.main}/settings/account`,
-  appearance: `${global.urls.main}/settings/appearance`,
-  privacy: `${global.urls.main}/settings/privacy-and-security`,
+  general: `${global.urls.main}/settings`
 };
+global.settings.account = `${global.settings.general}/account`;
+global.settings.appearance = `${global.settings.general}/appearance`;
+global.settings.privacy = `${global.settings.general}/privacy-and-security`;
 
 // Badge options:
 const badgeOptions = {

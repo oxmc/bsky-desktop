@@ -5,6 +5,7 @@ class SystemInfo {
   constructor() {
     this.platform = os.platform(); // 'win32', 'darwin', 'linux'
     this.release = os.release(); // OS version
+    this.arch = os.arch(); // 'arm', 'arm64', 'x64', 'x86'
     this.versionInfo = this._getVersionInfo(); // Parsed version
   }
 
@@ -23,6 +24,26 @@ class SystemInfo {
     return this.platform === 'linux';
   }
 
+  // Check if current system architecture is ARM
+  isARM() {
+    return this.arch === 'arm';
+  }
+
+  // Check if current system architecture is ARM64
+  isARM64() {
+    return this.arch === 'arm64';
+  }
+
+  // Check if current system architecture is x64
+  isX64() {
+    return this.arch === 'x64';
+  }
+
+  // Check if current system architecture is x86
+  isX86() {
+    return this.arch === 'x86';
+  }
+
   // Compare if current version is later than the given version
   laterThan(compareVersion) {
     const current = this.versionInfo;
@@ -33,6 +54,11 @@ class SystemInfo {
       if ((current[i] || 0) < (compare[i] || 0)) return false;
     }
     return false;
+  }
+
+  // Compare if current version is earlier than the given version
+  earlierThan(compareVersion) {
+    return !this.laterThan(compareVersion);
   }
 
   // Private: Parse version strings (e.g., "10.0.19045" -> [10, 0, 19045])
@@ -57,6 +83,11 @@ class SystemInfo {
       return [0, 0, 0]; // Unknown system
     }
   }
+
+  // Get current version as a string (e.g., "10.15.7")
+  getVersion() {
+    return this.versionInfo.join('.');
+  }
 }
 
 module.exports = SystemInfo;
@@ -66,6 +97,6 @@ module.exports = SystemInfo;
 //console.log(`Is Windows: ${sys.isWin()}`);
 //console.log(`Is macOS: ${sys.isMac()}`);
 //console.log(`Is Linux: ${sys.isLinux()}`);
-//console.log(`Current Version Info: ${sys.versionInfo.join('.')}`);
+//console.log(`Current Version Info: ${sys.getVersion()}`);
 //console.log(`Later than 10.0.19044: ${sys.laterThan('10.0.19044')}`);
 //console.log(`Later than 5.15.0 (Linux Kernel): ${sys.laterThan('5.15.0')}`);

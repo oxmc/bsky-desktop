@@ -163,7 +163,7 @@ jobs:
       - name: Merge latest .ymls
         uses: mikefarah/yq@v4.44.6
         with:
-          cmd: yq ea '. as $item ireduce ({}; . * $item )' dist/*/*.yml > dist/combined.yml
+          cmd: yq eval-all '. as $item ireduce ({}; . * $item )' dist/*/*.yml > merged.yml
 
       - name: Upload Release
         id: create_release
@@ -176,7 +176,7 @@ jobs:
             dist/linux/*.AppImage
             dist/windows/*.exe
             dist/macos/*.dmg
-            dist/combined.yml
+            merged.yml
 
   aur:
     name: Publish to AUR
@@ -184,24 +184,20 @@ jobs:
     needs: release
     env:
       AUR_TOKEN: ${{ secrets.AUR_TOKEN }}
-
     steps:
       - name: Checkout git repo
         uses: actions/checkout@v3
-
       - name: Download checksums
         uses: actions/download-artifact@v4
         with:
           name: checksums
           path: ./sha256sum.txt
-
       - name: Extract checksum from sha256sum.txt
         run: |
           new_checksum=$(awk 'NR==1 { print $1 }' ./sha256sum.txt)
           sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
-
       - name: Publish AUR package
-        uses: KSXGitHub/github-actions-deploy-aur@3.0.1
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
         with:
           pkgname: bskydesktop
           pkgbuild: ./build/PKGBUILD
