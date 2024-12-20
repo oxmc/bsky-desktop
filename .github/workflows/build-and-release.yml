@@ -126,8 +126,8 @@ jobs:
       
       - name: Generate checksum
         run: |
-          sha256sum dist/*.dmg > sha256sum.txt
-        #  sha256sum dist/*.pkg >> sha256sum.txt
+          shasum -a 256 dist/*.dmg > sha256sum.txt
+        #  shasum -a 256 dist/*.pkg >> sha256sum.txt
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
