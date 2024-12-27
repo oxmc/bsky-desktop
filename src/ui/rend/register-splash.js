@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 message: event.message,
                 position: 'topRight',
                 timeout: 5000,
-                ...event.options,
+                ...event.options.izitoast,
             });
         } catch (error) {
             console.error('Failed to display notification:', error);

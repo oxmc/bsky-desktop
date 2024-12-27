@@ -8,6 +8,7 @@ const badge = require('./badge');
 const contextMenu = require('./context-menu');
 const autoUpdater = require('./utils/auto-update');
 const loadCRX = require('./utils/loadCRX');
+const userStyles = require('./utils/userStyles');
 const log4js = require("log4js");
 const path = require("path");
 const fs = require("fs");
@@ -37,6 +38,7 @@ global.paths = {
 };
 global.paths.updateDir = path.join(global.paths.data, 'update');
 global.paths.extensions = path.join(global.paths.data, 'extensions');
+global.paths.userstyles = path.join(global.paths.data, 'userstyles');
 
 // URLs:
 global.urls = {
@@ -124,6 +126,12 @@ if (!fs.existsSync(global.paths.updateDir)) {
 if (!fs.existsSync(global.paths.extensions)) {
   logger.info("Creating Extensions Directory");
   fs.mkdirSync(global.paths.extensions, { recursive: true });
+};
+
+// Create userstyles directory if it does not exist:
+if (!fs.existsSync(global.paths.userstyles)) {
+  logger.info("Creating Userstyles Directory");
+  fs.mkdirSync(global.paths.userstyles, { recursive: true });
 };
 
 // improve performance on linux?
@@ -247,34 +255,6 @@ function createWindow() {
   // Badge count: (use mainWindow as that shows the badge on the taskbar)
   new badge(mainWindow, badgeOptions);
 
-  // Load extensions (.crx files):
-  logger.log("Checking for extensions");
-  const extensions = fs.readdirSync(global.paths.extensions).filter((file) => file.endsWith('.crx'));
-  if (extensions.length > 0) {
-    logger.log(`Unpacking ${extensions.length} extensions and loading them`);
-    extensions.forEach((extension) => {
-      loadCRX(path.join(global.paths.extensions, extension));
-    });
-  } else {
-    // Check for unpacked extensions:
-    const unpackedExtensions = fs.readdirSync(global.paths.extensions).filter((file) => fs.lstatSync(path.join(global.paths.extensions, file)).isDirectory());
-
-    // Check if the directory contains a manifest.json file
-    unpackedExtensions.forEach((extension) => {
-      const manifestPath = path.join(global.paths.extensions, extension, 'manifest.json');
-      if (fs.existsSync(manifestPath)) {
-        logger.log(`Loading unpacked extension: ${extension}`);
-        session.defaultSession.loadExtension(path.join(global.paths.extensions, extension)).then(({ id }) => {
-          logger.log(`Extension loaded with ID: ${id}`);
-        }).catch((error) => {
-          logger.error(`Failed to load extension: ${error}`);
-        });
-      } else {
-        logger.warn(`Skipping directory ${extension} as it does not contain a manifest.json file`);
-      };
-    });
-  };
-
   logger.log("Main Window Created, Showing splashscreen");
   splash.show();
   //mainWindow.show();
@@ -302,7 +282,7 @@ function createWindow() {
     };
   });
   PageView.webContents.setWindowOpenHandler(({ url }) => {
-    new BrowserWindow({ show: true, autoHideMenuBar: true }).loadURL(url);
+    new BrowserWindow({ show: true, autoHideMenuBar: true, icon: path.join(global.paths.app, 'ui', 'images', 'logo.png') }).loadURL(url);
     return { action: 'deny' };
   });
   // Log PageView navigations:
@@ -322,6 +302,7 @@ function showAboutWindow() {
     //open_devtools: process.env.NODE_ENV !== 'production',
     use_version_info: [
       ['Application Version', `${global.appInfo.version}`],
+      ['Contributors', packageJson.contributors.map((contributor) => contributor.name).join(', ')],
     ],
     license: `MIT, GPL-2.0, GPL-3.0, ${global.appInfo.license}`,
   });
@@ -405,7 +386,7 @@ function handleDeeplink(commandLine) {
       break;
 
     case "notiftest":
-      global.PageView.webContents.send('ui:notif', { title: 'Updater', message: 'Update downloaded', options: { position: 'topRight', timeout: 5000, layout: 2, color: 'blue' } });
+      global.PageView.webContents.send('ui:notif', { title: 'Updater', message: 'Update downloaded', options: { izitoast: { position: 'topRight', timeout: 5000, layout: 2, color: 'blue' } } });
       break;
 
     default:
@@ -527,6 +508,70 @@ app.whenReady().then(() => {
 
     createWindow();
     createTray();
+
+    // Load extensions (.crx files):
+    logger.log("Checking for extensions");
+    const extensions = fs.readdirSync(global.paths.extensions).filter((file) => file.endsWith('.crx'));
+    if (extensions.length > 0) {
+      logger.log(`Unpacking ${extensions.length} extensions and loading them`);
+      extensions.forEach((extension) => {
+        loadCRX(path.join(global.paths.extensions, extension));
+      });
+    } else {
+      // Check for unpacked extensions:
+      const unpackedExtensions = fs.readdirSync(global.paths.extensions).filter((file) => fs.lstatSync(path.join(global.paths.extensions, file)).isDirectory());
+
+      // Check if the directory contains a manifest.json file
+      unpackedExtensions.forEach((extension) => {
+        const manifestPath = path.join(global.paths.extensions, extension, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+          logger.log(`Loading unpacked extension: ${extension}`);
+          session.defaultSession.loadExtension(path.join(global.paths.extensions, extension)).then(({ id }) => {
+            logger.log(`Extension loaded with ID: ${id}`);
+          }).catch((error) => {
+            logger.error(`Failed to load extension: ${error}`);
+          });
+        } else {
+          logger.warn(`Skipping directory ${extension} as it does not contain a manifest.json file`);
+        };
+      });
+    };
+
+    // Load userstyles
+    logger.log("Checking for userstyles");
+    const userStylesDir = path.join(global.paths.userstyles);
+    if (fs.existsSync(userStylesDir)) {
+      const files = fs.readdirSync(userStylesDir);
+      if (files.length > 0) {
+        const userStylePromises = files.map(async file => {
+          const cssFile = path.join(userStylesDir, file);
+          // Parse the CSS file
+          try {
+            const cssContent = fs.readFileSync(cssFile, 'utf-8');
+            const result = await userStyles.parseCSS(cssContent);
+
+            logger.info(`Loaded userstyle: ${result.metadata.name}`);
+
+            // Compile the userstyle
+            const compiled = await userStyles.compileStyle(result.css, result.metadata);
+
+            // Check if the site 'bsky.app' is defined
+            if (compiled.sites && compiled.sites['bsky.app']) {
+              // Apply the userstyle to the PageView
+              await PageView.webContents.insertCSS(compiled.sites['bsky.app']);
+
+              logger.info(`Applied userstyle: ${result.metadata.name}`);
+            } else {
+              logger.warn(`Userstyle ${result.metadata.name} does not target 'bsky.app'`);
+            }
+          } catch (error) {
+            logger.error(`Error loading userstyle: ${file}`, error);
+          }
+        });
+
+        Promise.all(userStylePromises);
+      }
+    }
   } else {
     logger.log("Failed to get singleInstanceLock, Quitting");
     app.quit();

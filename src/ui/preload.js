@@ -47,10 +47,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load jQuery first
     loadScript('ui:///lib/jquery-3.3.1.min.js', () => {
-        // Load iziToast after jQuery
+        // Load confetti and iziToast after jQuery (ui libs)
+        loadScript('ui:///lib/confetti-1.9.3-browser.min.js');
         loadScript('ui:///lib/izitoast.min.js', () => {
+            // Load app specific scripts
             loadScript('ui:///rend/register-handles.js');
+            // Load custom implementations
             loadScript('ui:///rend/bsky-ext.js');
+            loadScript('ui:///rend/specialAnimations.js');
         });
     });
 });

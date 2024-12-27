@@ -1,6 +1,6 @@
 {
     "name": "bsky-desktop",
-    "version": "1.0.9",
+    "version": "1.1.0",
     "description": "A desktop app of bsky.app",
     "main": "src/app/main.js",
     "scripts": {
@@ -14,6 +14,20 @@
         "name": "oxmc",
         "email": "oxmc7769.mail@gmail.com"
     },
+    "contributors": [
+        {
+            "name": "oxmc",
+            "email": "contact@oxmc.is-a.dev"
+        },
+        {
+            "name": "PlOszukiwaczDEV",
+            "email": "ploszukiwacz1@duck.com"
+        },
+        {
+            "name": "GizzyUwU",
+            "email": "me@gizzy.pro"
+        }
+    ],
     "license": "AGPL-3.0-only",
     "devDependencies": {
         "electron": "^29.4.6",
@@ -25,9 +39,11 @@
         "adm-zip": "^0.5.12",
         "axios": "^1.6.8",
         "electron-window-state": "^5.0.3",
+        "less": "^4.2.1",
         "log4js": "^6.9.1",
         "node-notifier": "^10.0.0",
         "semver": "^7.6.3",
+        "usercss-meta": "^0.12.0",
         "v8-compile-cache": "^2.3.0"
     },
     "build": {
@@ -42,8 +58,18 @@
                 "dmg",
                 "pkg"
             ],
-            "icon": "src/ui/images/logo.icns",
+            "icon": "build/icons/mac-icon.icns",
             "category": "Network"
+        },
+        "pkg": {
+            "scripts": "build/mac-pkg/scripts",
+            "installLocation": "/Applications",
+            "allowAnywhere": true,
+            "allowCurrentUserHome": true,
+            "allowRootDirectory": true,
+            "isVersionChecked": true,
+            "isRelocatable": false,
+            "overwriteAction": "upgrade"
         },
         "linux": {
             "target": [

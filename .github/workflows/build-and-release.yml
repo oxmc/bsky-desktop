@@ -223,8 +223,8 @@ jobs:
       - name: Extract checksum from sha256sum.txt and change build version
         run: |
           new_checksum=$(awk 'NR==1 { print $1 }' ./dist/linux/sha256sum.txt)
-          sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/PKGBUILD
-          sed -i "s/^pkgver=.*$/pkgver=${{ steps.version.outputs.version }}/" ./build/PKGBUILD
+          sed -i "s|sha256sums=('SKIP' 'SKIP')|sha256sums=('$new_checksum' 'SKIP')|" ./build/arch-pkg/PKGBUILD
+          sed -i "s/^pkgver=.*$/pkgver=${{ steps.version.outputs.version }}/" ./build/arch-pkg/PKGBUILD
 
       - name: Publish AUR package
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
