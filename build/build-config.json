@@ -27,6 +27,7 @@
         "target": [
             "appimage",
             "deb",
+            "rpm",
             "zip"
         ],
         "icon": "src/ui/images/icons",
