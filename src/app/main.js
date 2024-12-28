@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, Tray, Menu, protocol, session } = require("electron");
+const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, Tray, Menu, protocol, session, dialog } = require("electron");
 const electronremote = require("@electron/remote/main");
 //const asar = require('@electron/asar');
 const windowStateKeeper = require("electron-window-state");
@@ -16,6 +16,14 @@ const os = require("os");
 require('v8-compile-cache');
 
 const packageJson = require(path.join(__dirname, '..', '..', 'package.json'));
+const contributors = require(path.join(__dirname, 'contributors.json'));
+
+// Check if app is ran from the installer dmg (macOS)
+if (process.platform === 'darwin' && app.isPackaged && app.isInApplicationsFolder()) {
+  // Creeate a dialog to ask the user to move the app to the Applications folder
+  dialog.showErrorBox('Move to Applications folder', 'Please move the app to the Applications folder to ensure it works correctly.');
+  app.quit();
+};
 
 // isUpdaing:
 global.isUpdating = false;
@@ -102,7 +110,7 @@ if (fs.existsSync(logFile) && !fs.existsSync(path.join(global.paths.data, 'lockf
     fs.renameSync(logFile, path.join(global.paths.data, `${logFileName}.${mtime.toISOString().split('T')[0]}.log`));
   };
 };
-logger.log("Starting Bsky Desktop");
+logger.log(`Starting Bsky Desktop v${packageJson.version} on ${os.platform()} ${os.arch()}`);
 
 // Create data directory if it does not exist:
 if (!fs.existsSync(global.paths.data)) {
@@ -302,7 +310,7 @@ function showAboutWindow() {
     //open_devtools: process.env.NODE_ENV !== 'production',
     use_version_info: [
       ['Application Version', `${global.appInfo.version}`],
-      ['Contributors', packageJson.contributors.map((contributor) => contributor.name).join(', ')],
+      ['Contributors', contributors.map((contributor) => contributor.name).join(', ')],
     ],
     license: `MIT, GPL-2.0, GPL-3.0, ${global.appInfo.license}`,
   });
@@ -310,7 +318,7 @@ function showAboutWindow() {
 
 function createTray() {
   logger.log("Creating Tray");
-  const tray = new Tray(path.join(global.paths.app, 'ui', 'images', 'logo.png'));
+  const tray = new Tray(path.join(global.paths.app, 'ui', 'images', 'icons', '32x32.png'));
   tray.setToolTip('Bsky Desktop');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: global.appInfo.name, enabled: false },
@@ -550,13 +558,13 @@ app.whenReady().then(() => {
             const cssContent = fs.readFileSync(cssFile, 'utf-8');
             const result = await userStyles.parseCSS(cssContent);
 
-            logger.info(`Loaded userstyle: ${result.metadata.name}`);
+            logger.info(`Loading userstyle: ${result.metadata.name}`);
 
             // Compile the userstyle
             const compiled = await userStyles.compileStyle(result.css, result.metadata);
 
             // Check if the site 'bsky.app' is defined
-            if (compiled.sites && compiled.sites['bsky.app']) {
+            if (compiled.sites?.['bsky.app']) {
               // Apply the userstyle to the PageView
               await PageView.webContents.insertCSS(compiled.sites['bsky.app']);
 

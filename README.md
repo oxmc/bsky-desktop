@@ -14,6 +14,20 @@ Bsky Desktop is an Electron-based application for Bsky that allows users to mana
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/bskydesktop.svg?columns=4&exclude_unsupported=1)](https://repology.org/project/bskydesktop/versions)
 
+#### Windows install options:
+- Zip (x64, arm64, ia32)
+- Setup (exe, msi, appx) (x64, arm64, ia32)
+
+#### Mac install options:
+- Zip (x64, arm64)
+- Dmg (x64, arm64)
+- Pkg (x64, arm64)
+
+#### Linux install options:
+- Zip (x64, arm64, ia32)
+- AppImage (x64, arm64, ia32)
+- Deb (x64, arm64, ia32)
+
 ### Build Instructions for Bsky Desktop
 
 To build and run Bsky Desktop locally, follow these steps:

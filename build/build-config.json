@@ -1,0 +1,55 @@
+{
+    "appId": "com.oxmc.bskyDesktop",
+    "productName": "bskyDesktop",
+    "asarUnpack": [
+        "./node_modules/node-notifier/**/*"
+    ],
+    "removePackageScripts": true,
+    "mac": {
+        "target": [
+            "dmg",
+            "pkg",
+            "zip"
+        ],
+        "icon": "src/ui/images/mac.icns",
+        "category": "Network"
+    },
+    "pkg": {
+        "installLocation": "/Applications",
+        "allowAnywhere": true,
+        "allowCurrentUserHome": true,
+        "allowRootDirectory": true,
+        "isVersionChecked": true,
+        "isRelocatable": false,
+        "overwriteAction": "upgrade"
+    },
+    "linux": {
+        "target": [
+            "appimage",
+            "deb",
+            "zip"
+        ],
+        "icon": "src/ui/images/icons",
+        "category": "Network"
+    },
+    "win": {
+        "target": [
+            "nsis",
+            "appx",
+            "msi",
+            "zip"
+        ],
+        "icon": "src/ui/images/logo.ico"
+    },
+    "appx": {
+        "identityName": "BskyDesktop"
+    },
+    "protocols": [
+        {
+            "name": "bsky",
+            "schemes": [
+                "bsky"
+            ]
+        }
+    ]
+}

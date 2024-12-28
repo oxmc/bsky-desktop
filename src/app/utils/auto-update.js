@@ -80,7 +80,7 @@ function asarUpdate() {
 
 function checkForUpdates() {
     // Current system information
-    logger.log('Current system information:', sys.platform, sys.getVersion());
+    logger.log('Current system information:', sys.platform, sys.getVersion(), sys.arch);
 
     // Check if the current system is Windows
     if (sys.isWin()) {
