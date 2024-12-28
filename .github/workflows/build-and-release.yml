@@ -31,8 +31,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build (ia32)
-        run: npm run build -- --arch ia32
+      - name: Build (armv7l)
+        run: npm run build -- --arch armv7l
 
       - name: Build (x64)
         run: npm run build -- --arch x64
