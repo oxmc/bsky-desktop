@@ -1,0 +1,31 @@
+<html>
+
+<head>
+    <title>No internet connection</title>
+    <link rel="stylesheet" href="./css/offline.css">
+    <link rel="stylesheet" href="./css/fa/6.7.1/css/all.min.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="divround" style="width: 510px;">
+            <h1>No internet connection</h1>
+            <p>We couldn't detect an internet connection. Please check your network and try again.</p>
+            <button class="btn" id="refresh-app"><i class="fa fa-refresh"></i> Reload</button>
+        </div>
+    </div>
+    <script>
+        // When the reload button is clicked, send a message to the main process to reload the app
+        document.getElementById('refresh-app').addEventListener('click', () => {
+            // Check for internet connection before reloading
+            if (navigator.onLine) {
+                window.ipc.send('app:restart');
+                return;
+            } else {
+                alert('Please check your network and try again.');
+            };
+        });
+    </script>
+</body>
+
+</html>

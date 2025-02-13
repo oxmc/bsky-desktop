@@ -1,0 +1,105 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent overflow from the body */
+    font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #082032;
+    color: white;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; /* Align items to the top */
+    height: 100vh; /* Full viewport height */
+    overflow-y: auto; /* Allow vertical scrolling */
+    margin: 0;
+}
+
+.divround {
+    background-color: #2c394b;
+    height: auto; /* Let it grow with content */
+    width: 90vw; /* or set a max-width if preferred */
+    max-width: 510px; /* Fixed width for your content */
+    margin: auto;
+    padding: 2.375vh; /* Converted from 19px to vh */
+    border-radius: 0.5em;
+    box-shadow: 2px 3px 7px 2px rgba(0, 0, 0, 0.02);
+    text-align: center;
+    overflow-y: auto; /* Allow scrolling inside the element if needed */
+}
+
+.circular {
+    border-radius: 125px;
+    -webkit-border-radius: 125px;
+    -moz-border-radius: 125px;
+    background-size: cover;
+    display: inline-block;
+    width: 250px;
+    height: 250px;
+}
+
+.btn {
+    background-color: DodgerBlue;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 20px;
+    border-radius: 8px;
+}
+
+/* Non-rounded border */
+.btn.nr {
+    border-radius: 0px;
+}
+
+/* Full width */
+.btn.fw {
+    width: 100%
+}
+
+/* Darker background on mouse-over */
+.btn:hover {
+    background-color: RoyalBlue;
+}
+
+/* Success btn */
+.btn.success {
+    background-color: #a6efb8e6;
+}
+
+/* Danger btn */
+.btn.danger {
+    background-color: #ffafb4e6;
+}
+
+/* Warning btn */
+.btn.warning {
+    background-color: #ffefb4e6;
+}
+
+/* Info btn */
+.btn.info {
+    background-color: #b4e4f9e6;
+}
+
+/* button (input style) */
+.btn.input {
+    background-color: rgb(82, 124, 165);
+}
+
+/* Darker on mouse-over */
+.btn.input:hover {
+    background-color: rgb(72, 109, 146);
+}
+
+/* Darker on active */
+.btn.input:active {
+    background-color: rgb(66, 111, 155);
+}

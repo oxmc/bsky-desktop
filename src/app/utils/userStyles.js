@@ -1,5 +1,6 @@
 const usercssMeta = require('usercss-meta');
 const less = require('less');
+const stylus = require('stylus');
 
 /**
  * Extracts all global variable and mixin definitions from CSS.
@@ -72,8 +73,8 @@ function parseDomainRule(css, startPos) {
     if (!match) return null;
 
     const domains = match[0]
-        .match(/'[^']+'/g) // Extract all single-quoted domain values
-        .map(domain => domain.replace(/'/g, '').trim());
+        .match(/['"][^'"]+['"]/g) // Extract all single- or double-quoted domain values
+        .map(domain => domain.replace(/['"]/g, '').trim()); // Remove quotes and trim whitespace
 
     return {
         domains,
@@ -90,17 +91,26 @@ function parseMozRules(css) {
     const rules = {};
     let currentPos = 0;
 
+    // Helper to extract global definitions (CSS outside @-moz-document)
     const globalCode = extractGlobalDefinitions(css);
 
-    while (true) {
-        const domainRule = parseDomainRule(css, currentPos);
-        if (!domainRule) break;
+    while (currentPos < css.length) {
+        // Match @-moz-document syntax and extract domains
+        const domainMatch = css.slice(currentPos).match(/@-moz-document\s+(.*?){/s);
+        if (!domainMatch) break;
 
-        const bracedContent = extractBracedContent(css, domainRule.ruleStart);
+        const domainsStr = domainMatch[1];
+        const ruleStart = currentPos + domainMatch.index + domainMatch[0].length - 1;
+
+        // Extract the content inside the braces for this @-moz-document rule
+        const bracedContent = extractBracedContent(css, ruleStart);
         if (!bracedContent) break;
 
-        // Add the CSS to all matched domains
-        for (const domain of domainRule.domains) {
+        // Parse the domains and add the CSS to each
+        const domainList = domainsStr.match(/domain\("([^"]+)"\)/g) || [];
+        const domains = domainList.map((d) => d.match(/domain\("([^"]+)"\)/)[1]);
+
+        for (const domain of domains) {
             rules[domain] = `${globalCode}\n${bracedContent.content}`;
         }
 
@@ -155,10 +165,17 @@ async function compileStyle(code, metadata, userVars = {}) {
 
         switch (metadata?.preprocessor?.toLowerCase()) {
             case 'less':
-                compiledCode = await compileLess(fullCode);
+                compiledCode = await compileLess(fullCode, vars);
                 break;
+            case 'stylus':
+                compiledCode = await compileStylus(fullCode, vars);
+                break;
+            case 'sass':
+                throw Error('SASS preprocessor not supported yet. Skipping compilation.');
+            case 'scss':
+                throw Error('SCSS preprocessor not supported yet. Skipping compilation.');
             default:
-                compiledCode = code; // Return unmodified for unknown preprocessors
+                compiledCode = code; // Return unmodified for plain CSS/unknown preprocessor
         }
 
         // Parse domain rules
@@ -167,10 +184,15 @@ async function compileStyle(code, metadata, userVars = {}) {
         // Compile each domain's CSS if needed
         const compiledRules = {};
         for (const [domain, css] of Object.entries(domainRules)) {
-            if (metadata.preprocessor === 'less') {
-                compiledRules[domain] = await compileLess(css, vars);
-            } else {
-                compiledRules[domain] = css;
+            switch (metadata.preprocessor?.toLowerCase()) {
+                case 'less':
+                    compiledRules[domain] = await compileLess(css, vars);
+                    break;
+                case 'stylus':
+                    compiledRules[domain] = await compileStylus(css, vars);
+                    break;
+                default:
+                    compiledRules[domain] = css;
             }
         }
 
@@ -181,27 +203,55 @@ async function compileStyle(code, metadata, userVars = {}) {
 
         return {
             compiledCss: combinedCss,
-            sites: compiledRules // Map of domains to their CSS
+            sites: compiledRules, // Map of domains to their CSS
         };
 
     } catch (error) {
-        console.error('Style compilation error:', error);
-        throw error;
+        //console.error('Style compilation error:', error);
+        return {
+            error
+        };
     }
 }
 
 /**
  * Compiles LESS code to CSS.
  * @param {string} code - The LESS code.
+ * @param {object} vars - User-defined variables.
  * @returns {Promise<string>} The compiled CSS.
  */
-async function compileLess(code) {
-    const { css } = await less.render(code, {
-        math: 'parens-division',
-        javascriptEnabled: true,
-        compress: false
+async function compileLess(code, vars = {}) {
+    return new Promise((resolve, reject) => {
+        less.render(code, {
+            math: 'parens-division',
+            javascriptEnabled: true,
+            compress: false,
+            globalVars: vars
+        }, (err, output) => {
+            if (err) return reject(err);
+            resolve(output.css);
+        });
     });
-    return css;
+}
+
+/**
+ * Compiles Stylus code to CSS.
+ * @param {string} code - The Stylus code.
+ * @returns {Promise<string>} The compiled CSS.
+ */
+async function compileStylus(code, vars = {}) {
+    console.log(vars, code);
+    return new Promise((resolve, reject) => {
+        var stlus = stylus(code);
+        stlus.set('compress', false);
+        for (const [key, value] of Object.entries(vars)) {
+            stlus.define(key, value);
+        }
+        stlus.render((err, output) => {
+            if (err) return reject(err);
+            resolve(output);
+        });
+    });
 }
 
 module.exports = {
