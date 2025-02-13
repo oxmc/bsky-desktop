@@ -10,6 +10,7 @@ const args = process.argv.slice(2);
 const carch = args.includes('--arch') ? args[args.indexOf('--arch') + 1] : null;
 const cplatform = args.includes('--platform') ? args[args.indexOf('--platform') + 1] : null;
 const pack = args.includes('--pack');  // Keep track of --pack as a boolean flag
+const nobc = args.includes('--no-bc');  // Keep track of --nobc as a boolean flag
 
 // Determine platform
 let platform;
@@ -59,14 +60,38 @@ if (pack) {
     buildArgs.push('--dir');
 }
 
-// Read build-config.json
+// Default build configuration (used when --no-bc is passed) [Default values are for bskyDesktop]
+const defaultBuildConfig = {
+    "appId": "com.oxmc.bskyDesktop",
+    "productName": "bskyDesktop",
+    "asarUnpack": [
+        "./node_modules/node-notifier/**/*"
+    ],
+    "win": {
+        "icon": "src/ui/images/logo.ico",
+    },
+    "mac": {
+        "icon": "src/ui/images/mac.icns",
+    },
+    "linux": {
+        "icon": "src/ui/images/icons",
+    },
+};
+
+// Read build-config.json if it exists and --no-bc is not present
 const buildConfigPath = path.join(__dirname, 'build-config.json');
-let buildConfig;
-try {
-    buildConfig = require(buildConfigPath);
-} catch (err) {
-    console.error(`Failed to read build-config.json: ${err.message}`);
-    process.exit(1);
+let buildConfig = defaultBuildConfig;
+if (!nobc) {
+    if (!require('fs').existsSync(buildConfigPath)) {
+        console.error('build-config.json not found');
+        process.exit(1);
+    }
+    try {
+        buildConfig = require(buildConfigPath);
+    } catch (err) {
+        console.error(`Failed to read build-config.json: ${err.message}`);
+        process.exit(1);
+    }
 }
 
 // Generate artifact name
@@ -84,12 +109,12 @@ const options = {
         oneClick: true,
         perMachine: false
     },
-    dmg: {
+    /*dmg: {
         contents: [
             { type: 'file', x: 255, y: 85 },
             { type: 'link', path: '/Applications', x: 253, y: 325 }
         ]
-    },
+    },*/
     ...buildConfig
 };
 

@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     ipcRenderer.on('ui:progtext', (event, other) => {
         console.log('Updating progress text:', other);
         infotext.innerText = other.title;
-        progtext.innerText = other.subtitle;
+        if (other.subtitle) {
+            progtext.innerText = other.subtitle;
+        };
     });
 });

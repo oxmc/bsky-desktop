@@ -1,65 +1,64 @@
 name: Bug
 description: Make sure you complete the template. Otherwise, it will be closed without further explanation!
 title: "[v<replace_this_with_your_bsky-desktop_version>] Replace this with your title"
-labels: bug
+labels: [bug]
 body:
-- type: checkboxes
-  attributes:
-    label: Is there an existing issue for this?
-    description: _Please check the [**issues**](https://github.com/oxmc/bsky-desktop/issues) page to see if someone has already reported the bug. **I DIDN\'T MAKE THIS CHECKBOX FOR COSMETIC.**_
-    options:
-    - label: I have searched the existing issues
-      required: true
-      
-- type: textarea
-  attributes:
-    label: Device information
-    description: 
-    value: |
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: _Please check the [**issues**](https://github.com/oxmc/bsky-desktop/issues) page to see if someone has already reported the bug. **I DIDN\'T MAKE THIS CHECKBOX FOR COSMETIC.**_
+      options:
+        - label: I have searched the existing issues
+          required: true
+
+  - type: textarea
+    attributes:
+      label: Device information
+      description: "_Please provide the following information:_"
+      value: |
         - OS: 
         - Hardware Specs:
         - Etc:
-  validations:
-    required: true
+    validations:
+      required: true
 
-- type: textarea
-  attributes:
-    label: Describe the issue
-    description: _Please attach videos or screenshots if possible_
-  validations:
-    required: true
+  - type: textarea
+    attributes:
+      label: Describe the issue
+      description: _Please attach videos or screenshots if possible_
+    validations:
+      required: true
 
-- type: textarea
-  attributes:
-    label: Steps to reproduce
-    description: _Please attach videos or screenshots if possible_
-    value: |
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: _Please attach videos or screenshots if possible_
+      value: |
         1. 
-        2. 
-  validations:
-    required: true
+        2.
+    validations:
+      required: true
 
-- type: textarea
-  id: logs
-  attributes:
-    label: Crash log
-    description: _If the app crashes, **please provide the crash log**.
-    render: shell
+  - type: textarea
+    id: logs
+    attributes:
+      label: Crash log
+      description: _If the app crashes, **please provide the crash log**.
+      render: shell
 
-- type: dropdown
-  attributes:
-    label: Are you using the latest version of bsky-destop? If not, why?
-    description: _Developers spent loads of time and effort to fix bugs & make improvements with every release. You might want to try and update to the [latest version](https://github.com/oxmc/bsky-desktop/releases) before reporting an issue._
-    multiple: false
-    options:
-      - ✅ Yes, I'm using the latest version of bsky-desktop
-      - ❌ No, I'll explain with additional information below
-  validations:
-    required: true
+  - type: dropdown
+    attributes:
+      label: Are you using the latest version of bsky-destop? If not, why?
+      description: _Developers spent loads of time and effort to fix bugs & make improvements with every release. You might want to try and update to the [latest version](https://github.com/oxmc/bsky-desktop/releases) before reporting an issue._
+      multiple: false
+      options:
+        - ✅ Yes, I'm using the latest version of bsky-desktop
+        - ❌ No, I'll explain with additional information below
+    validations:
+      required: true
 
-- type: textarea
-  attributes:
-    label: Additional information
-  validations:
-    required: false
-
+  - type: textarea
+    attributes:
+      label: Additional information
+    validations:
+      required: false

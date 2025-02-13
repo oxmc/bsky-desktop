@@ -90,7 +90,7 @@ class Updater extends EventEmitter {
         };
         this.options = Object.assign({}, def, options);
         this.options.cacheDirectory = path.resolve(this.options.tmpdir, this.options.name);
-        this.options.headers['user-agent'] = this.options.headers['user-agent'] || 'asar-updater/v0.0.2 (https://github.com/zce/asar-updater)';
+        this.options.headers['user-agent'] = this.options.headers['user-agent'] || 'Mozilla/5.0 asar-updater/v0.3.3 (https://github.com/zce/asar-updater)';
         fs.existsSync(this.options.cacheDirectory) || fs.mkdirSync(this.options.cacheDirectory);
     }
 
@@ -207,7 +207,7 @@ class Updater extends EventEmitter {
 
     quitAndInstall(timeout) {
         setTimeout(() => {
-            app.relaunch({ args: process.argv.slice(1) + ['--relaunch'] });
+            app.relaunch({ args: process.argv.slice(1) + ['--relaunch', '--update-installed'] });
             app.exit(0);
         }, timeout || 100);
     }

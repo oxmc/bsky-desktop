@@ -61,6 +61,16 @@ class SystemInfo {
     return !this.laterThan(compareVersion);
   }
 
+  // Get edition of the os
+  getEdition() {
+    if (this.isWin()) {
+      const edition = childProcess.execSync('wmic os get Caption').toString().trim();
+      return edition.split('\n')[1].trim();
+    } else {
+      return 'N/A';
+    }
+  }
+
   // Private: Parse version strings (e.g., "10.0.19045" -> [10, 0, 19045])
   _parseVersion(version) {
     return version.split('.').map((num) => parseInt(num, 10) || 0);
