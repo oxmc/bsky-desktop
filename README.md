@@ -3,7 +3,7 @@
 Bsky Desktop is an Electron-based application for Bsky that allows users to manage their accounts and feeds directly from the app, rather than through the web interface.
 
 ### Features:
-- Support for user styles (work in progress; currently only LESS preprocessor is supported)
+- Support for user styles (work in progress; currently only LESS and Stylus preprocessor is supported)
 - Compatibility with both Manifest V2 and V3 Chrome extensions, though only a limited set of Chrome extension APIs are supported. For more information, visit: [Electron Extensions API Documentation](https://www.electronjs.org/docs/latest/api/extensions#supported-extensions-apis)
 
 ### Working on:
