@@ -54,6 +54,7 @@ jobs:
           sha256sum dist/*.AppImage > dist/sha256sum.txt
           sha256sum dist/*.deb >> dist/sha256sum.txt
           sha256sum dist/*.zip >> dist/sha256sum.txt
+          sha256sum dist/*.rpm >> dist/sha256sum.txt
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -64,6 +65,7 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/*.zip
+            dist/*.rpm
             dist/latest*.yml
             dist/sha256sum.txt
 
@@ -209,6 +211,7 @@ jobs:
             dist/linux/*.AppImage
             dist/linux/*.deb
             dist/linux/*.zip
+            dist/linux/*.rpm
             dist/windows/*.exe
             dist/windows/*.msi
             dist/windows/*.appx
