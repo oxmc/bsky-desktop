@@ -26,7 +26,7 @@
         "@electron/asar": "^3.2.17",
         "@electron/remote": "^2.1.2",
         "adm-zip": "^0.5.12",
-        "axios": "^1.6.8",
+        "axios": "^1.8.2",
         "less": "^4.2.1",
         "log4js": "^6.9.1",
         "node-notifier": "^10.0.0",
