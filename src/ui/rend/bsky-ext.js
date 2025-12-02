@@ -206,7 +206,7 @@ const BskyExt = {
 
             // Load the Twemoji script
             let twemojiScript = document.createElement("script");
-            twemojiScript.src = "ui:///lib/twemoji.min.js";
+            twemojiScript.src = "app://ui/lib/twemoji.min.js";
             twemojiScript.onload = () => {
                 console.log("Loaded Twemoji script");
             };
@@ -302,7 +302,7 @@ const BskyExt = {
                 "type": "messaging",
                 "icon": "fab fa-signal",
                 "brand": {
-                    "color": "#3FBF3F",
+                    "color": "#3b45fd",
                 },
                 "regex": /signal\.org\/([a-zA-Z0-9_]+)/
             },
@@ -563,7 +563,7 @@ const BskyExt = {
                 "type": "content",
                 "icon": "fas fa-paw",
                 "brand": {
-                    "color": "#FF6600",
+                    "color": "#adacacff",
                 },
                 "regex": /furaffinity\.net\/user\/([a-zA-Z0-9_]+)/
             },
@@ -599,7 +599,7 @@ const BskyExt = {
                 "type": "content",
                 "icon": "fas fa-fan",
                 "brand": {
-                    "color": "#fbae00",
+                    "color": "#00c0fbff",
                 },
                 "regex": /onlyfans\.com\/([a-zA-Z0-9_]+)/
             },

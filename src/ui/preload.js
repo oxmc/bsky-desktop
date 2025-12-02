@@ -44,17 +44,17 @@ function injectCSS(href) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    injectCSS("ui:///lib/izitoast.min.css");
-    injectCSS("ui:///rend/extra-themes.css");
-    injectCSS("ui:///css/fa/6.7.1/css/all.min.css");
+    injectCSS("app://ui/lib/izitoast.min.css");
+    injectCSS("app://ui/rend/extra-themes.css");
+    injectCSS("app://ui/css/fa/6.7.1/css/all.min.css");
 
     try {
-        await loadScriptAsync("ui:///lib/jquery-3.3.1.min.js");
-        await loadScriptAsync("ui:///lib/confetti-1.9.3-browser.min.js");
-        await loadScriptAsync("ui:///lib/izitoast.min.js");
-        await loadScriptAsync("ui:///rend/register-handles.js");
-        await loadScriptAsync("ui:///rend/bsky-ext.js");
-        await loadScriptAsync("ui:///rend/specialAnimations.js");
+        await loadScriptAsync("app://ui/lib/jquery-3.3.1.min.js");
+        await loadScriptAsync("app://ui/lib/confetti-1.9.3-browser.min.js");
+        await loadScriptAsync("app://ui/lib/izitoast.min.js");
+        await loadScriptAsync("app://ui/rend/register-handles.js");
+        await loadScriptAsync("app://ui/rend/bsky-ext.js");
+        await loadScriptAsync("app://ui/rend/specialAnimations.js");
     } catch (error) {
         console.error("Failed to load one or more scripts.", error);
     }

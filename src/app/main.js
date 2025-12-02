@@ -1,112 +1,40 @@
-const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, Tray, Menu, protocol, session, dialog } = require("electron");
+const { app, BrowserWindow, WebContentsView, safeStorage, globalShortcut, ipcMain, Tray, Menu, protocol, session, dialog, nativeImage } = require("electron");
 const electronremote = require("@electron/remote/main");
-//const asar = require('@electron/asar');
-const windowStateKeeper = require("./window-state/index");
-const { setupTitlebar, attachTitlebarToWindow } = require("./titlebar/main");
-const openAboutWindow = require("./about-window/src/index").default;
-const badge = require('./badge');
-const nodeNotifier = require('node-notifier');
-const contextMenu = require('./context-menu');
-const autoUpdater = require('./utils/auto-update');
-const loadCRX = require('./utils/loadCRX');
-const userStyles = require('./utils/userStyles');
+const admzip = require("adm-zip");
 const log4js = require("log4js");
-//const axios = require("axios");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
 require('v8-compile-cache');
 
-// Load package.json and contributors.json
+// Load package.json, contributors.json, and config.js:
 const packageJson = require(path.join(__dirname, '..', '..', 'package.json'));
 const contributors = require(path.join(__dirname, 'contributors.json'));
+const initConfig = require(path.join(__dirname, 'config.js'));
+config = initConfig(app, packageJson);
+global.config = config;
+global.app_settings = config.app_settings;
+global.appInfo = config.app;
+global.paths = config.paths;
+global.urls = config.urls;
 
-// isUpdaing:
-global.isUpdating = false;
+// Local modules
+const windowStateKeeper = require("./module/window-state/index");
+const { setupTitlebar, attachTitlebarToWindow } = require("./module/titlebar/main");
+const AboutWindow = require("./module/about-window/src/index").default;
+const badge = require('./module/badge');
+const autoUpdater = require('./module/updater/auto-update');
+const loadCRX = require('./utils/loadCRX');
+const userStyles = require('./utils/userstyles');
 
-// App Info:
-global.appInfo = {
-  name: app.getName(),
-  version: app.getVersion(),
-  license: packageJson.license,
-  deeplink: 'bsky'
-}
-
-// Paths:
-global.paths = {
-  app_root: app.getAppPath(),
-  app: path.join(app.getAppPath(), 'src'),
-  data: os.platform() === 'win32' ? path.join(os.homedir(), 'AppData', 'Roaming', global.appInfo.name) : os.platform() === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support', global.appInfo.name) : path.join(os.homedir(), '.config', global.appInfo.name),
-  home: os.homedir(),
-  temp: path.join(os.tmpdir(), global.appInfo.name),
-};
-global.paths.user = path.join(global.paths.data, 'user');
-global.paths.updateDir = path.join(global.paths.user, 'update');
-global.paths.extensions = path.join(global.paths.user, 'extensions');
-global.paths.userstyles = path.join(global.paths.user, 'userstyles');
-
-// URLs:
-global.urls = {
-  main: 'https://bsky.app'
-};
-
-// Settings urls:
-global.settings = {
-  general: `${global.urls.main}/settings`
-};
-global.settings.account = `${global.settings.general}/account`;
-global.settings.appearance = `${global.settings.general}/appearance`;
-global.settings.privacy = `${global.settings.general}/privacy-and-security`;
-
-// Check if app is run from the installer dmg (macOS)
-if (process.platform === 'darwin' && app.isPackaged && !app.isInApplicationsFolder()) {
-  const response = dialog.showMessageBoxSync({
-    type: 'question',
-    buttons: ['Yes', 'No'],
-    title: 'Move to Applications folder',
-    message: 'Please move the app to the Applications folder to ensure it works correctly. Would you like to move it now?'
-  });
-
-  if (response === 0) {  // User clicked 'Yes'
-    const appPath = app.getPath('exe');
-    const applicationsFolder = '/Applications';
-    const appName = path.basename(appPath);
-    const destinationPath = path.join(applicationsFolder, appName);
-
-    // Try to move the app
-    fs.rename(appPath, destinationPath, (err) => {
-      if (err) {
-        dialog.showErrorBox('Move Failed', 'Failed to move the app to the Applications folder.');
-      } else {
-        dialog.showInformationBox({ message: 'The app has been moved to the Applications folder. Please restart it.' });
-        app.quit();
-      }
-    });
-  } else {
-    dialog.showErrorBox('Move to Applications folder', 'Please move the app to the Applications folder to ensure it works correctly.');
-    app.quit();
-  }
-}
-
-// Badge options:
-const badgeOptions = {
-  fontColor: '#FFFFFF', // The font color
-  font: '62px Microsoft Yahei', // The font and its size. You shouldn't have to change this at all
-  color: '#FF0000', // The background color
-  radius: 48, // The radius for the badge circle. You shouldn't have to change this at all
-  useSystemAccentTheme: true, // Use the system accent color for the badge
-  updateBadgeEvent: 'ui:badgeCount', // The IPC event name to listen on
-  badgeDescription: 'Unread Notifications', // The badge description
-  invokeType: 'send', // The IPC event type
-  max: 9, // The maximum integer allowed for the badge. Anything above this will have "+" added to the end of it.
-  fit: false, // Useful for multi-digit numbers. For single digits keep this set to false
-  additionalFunc: (count) => {
-    // An additional function to run whenever the IPC event fires. It has a count parameter which is the number that the badge was set to.
-    //console.log(`Received ${count} new notifications!`);
-  },
-};
+// Development mode check:
+const isDev = !app.isPackaged && (fs.existsSync(path.join(global.paths.data, ".dev")) || fs.existsSync(path.join(global.paths.data, ".debug")));
 
 /* Logging */
+// Create logs directory if it does not exist
+if (!fs.existsSync(global.paths.logs)) {
+  fs.mkdirSync(global.paths.logs, { recursive: true });
+};
 const logFileName = 'BSKY-DESKTOP';
 const logFile = path.join(global.paths.data, `${logFileName}.log`);
 log4js.configure({
@@ -115,7 +43,9 @@ log4js.configure({
     bskydesktop: {
       type: "file",
       filename: `${logFile}`,
+      maxLogSize: 10 * 1024 * 1024,
       backups: 5,
+      compress: true
     }
   },
   categories: {
@@ -126,18 +56,56 @@ log4js.configure({
   }
 });
 const logger = log4js.getLogger("bskydesktop");
-logger.level = fs.existsSync(path.join(global.paths.data, '.dev')) || fs.existsSync(path.join(global.paths.data, '.debug')) ? "debug" : "info";
-// if logfile already exists, rename it unles the lock file is present
-if (fs.existsSync(logFile) && !fs.existsSync(path.join(global.paths.data, 'lockfile'))) {
+logger.level = isDev ? "debug" : "info";
+// if logfile already exists, rename it unless the lock file is present
+// rotate + zip old logs if present
+if (fs.existsSync(logFile) && !fs.existsSync(path.join(global.paths.data, "lockfile"))) {
   const stats = fs.statSync(logFile);
   const mtime = new Date(stats.mtime);
-  const today = new Date();
-  // If the log file is from a different day or the secconds is more than 5, rename it
-  if (mtime.getDate() !== today.getDate() || mtime.getSeconds() + 5 < today.getSeconds()) {
-    fs.renameSync(logFile, path.join(global.paths.data, `${logFileName}.${mtime.toISOString().split('T')[0]}.log`));
-  };
-};
-logger.log(`Starting Bsky Desktop v${packageJson.version} on ${os.platform()} ${os.arch()}`);
+  const now = new Date();
+
+  const isOld = mtime.toDateString() !== now.toDateString() || (now - mtime) > 5000; // 5s old or different day
+
+  if (isOld) {
+    const timestamp = mtime.toISOString().replace(/[:.]/g, "-");
+    const rotatedName = `${logFileName}.${timestamp}.log`;
+    const rotatedPath = path.join(global.paths.logs, rotatedName);
+
+    // rename to timestamped file
+    fs.renameSync(logFile, rotatedPath);
+
+    // zip the old log
+    const zip = new admzip();
+    zip.addLocalFile(rotatedPath);
+    const zipPath = rotatedPath.replace(/\.log$/, ".zip");
+    zip.writeZip(zipPath);
+
+    // remove the uncompressed rotated log
+    fs.unlinkSync(rotatedPath);
+
+    logger.info(`Old log rotated and zipped: ${zipPath}`);
+
+    // enforce max of 5 log archives
+    const files = fs
+      .readdirSync(global.paths.data)
+      .filter(f => f.startsWith(logFileName) && f.endsWith(".zip"))
+      .map(f => path.join(global.paths.data, f))
+      .sort((a, b) => fs.statSync(b).mtime - fs.statSync(a).mtime); // newest first
+
+    if (files.length > 5) {
+      const toDelete = files.slice(5); // keep newest 5
+      toDelete.forEach(f => {
+        fs.unlinkSync(f);
+        logger.info(`Old log deleted: ${f}`);
+      });
+    }
+  }
+}
+if (logger.isDebugEnabled()) {
+  console.log(`Running in ${isDev ? 'development' : 'production'} mode`);
+  console.log(`config:`, config);
+}
+logger.log(`Starting ${global.appInfo.name} v${packageJson.version} on ${os.platform()} ${os.arch()}`);
 
 // Create data directory if it does not exist:
 if (!fs.existsSync(global.paths.data)) {
@@ -175,13 +143,42 @@ if (!fs.existsSync(global.paths.updateDir)) {
   fs.mkdirSync(global.paths.updateDir, { recursive: true });
 };
 
-// improve performance on linux?
-if (process.platform !== "win32" && process.platform !== "darwin") {
-  logger.log("Disabling Hardware Acceleration and Transparent Visuals");
-  app.commandLine.appendSwitch("disable-transparent-visuals");
-  app.commandLine.appendSwitch("disable-gpu");
-  app.disableHardwareAcceleration();
+// User config
+const userConfigPath = path.join(global.paths.data, 'config.json');
+let userConfig = fs.existsSync(userConfigPath) ? JSON.parse(fs.readFileSync(userConfigPath)) : {};
+global.userConfig = userConfig;
+
+// Performance
+if (process.platform !== 'win32' && process.platform !== 'darwin') {
+  logger.log('Disabling Transparent Visuals');
+  app.commandLine.appendSwitch('disable-transparent-visuals');
+} else {
+  // GPU-boosting flags only when GPU is allowed
+  app.commandLine.appendSwitch('enable-features', 'UseSkiaRenderer');
+  app.commandLine.appendSwitch('enable-zero-copy');
+  app.commandLine.appendSwitch('ignore-gpu-blacklist');
+  app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
 }
+
+// General performance flags (Disable unneeded features, increase memory limits)
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion,Translate,AutofillServerCommunication,Autofill,BackgroundSync');
+app.commandLine.appendSwitch("disable-shared-dictionary");
+app.commandLine.appendSwitch("disable-spell-checking");
+app.commandLine.appendSwitch("disable-spellchecking-dictionaries");
+app.commandLine.appendSwitch('js-flags', '--expose-gc --max-old-space-size=4096 --gc-global --always-compacts');
+app.commandLine.appendSwitch('process-per-site');
+
+// Handle garbage collection (every 60s)
+if (global.gc) {
+  logger.log('Manual GC enabled');
+  setInterval(() => {
+    if (global.gc) {
+      logger.log('Running manual GC...')
+      global.gc()
+    }
+  }, 60000);
+};
 
 // setup the titlebar main process:
 setupTitlebar();
@@ -206,7 +203,7 @@ if (process.env.NODE_ENV !== 'development') {
 function createWindow() {
   logger.log("Creating windowStateKeeper");
   const mainWindowState = windowStateKeeper({
-    defaultWidth: 1340,
+    defaultWidth: 1280,
     defaultHeight: 800,
     fullScreen: false,
     maximize: true,
@@ -217,8 +214,7 @@ function createWindow() {
     height: 400,
     frame: false,
     show: false,
-    icon: path.join(global.paths.app, 'ui', 'images', 'logo.png'),
-    alwaysOnTop: true,
+    icon: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
     skipTaskbar: true,
     webPreferences: {
       nodeIntegration: true,
@@ -236,125 +232,132 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     show: false,
-    icon: path.join(global.paths.app, 'ui', 'images', 'logo.png'),
     titleBarStyle: 'hidden',
-    titleBarOverlay: true,
+    titleBarOverlay: process.platform === 'darwin' ? false : true,
+    icon: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: true,
-      preload: path.join(global.paths.app, 'ui', 'preload-titlebar.js'),
+      nodeIntegration: false,
+      contextIsolation: true
     }
   }));
   mainWindowState.manage(mainWindow);
-  mainWindow.loadFile(path.join(global.paths.app, 'ui', 'titlebar.html'));
   mainWindow.hide();
-  const PageView = (global.PageView = new BrowserView({
+  logger.log("Creating Title Bar View");
+  const titlebarWindow = (global.titlebarWindow = new WebContentsView({
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      preload: path.join(global.paths.app, 'ui', 'preload-titlebar.js')
+    }
+  }));
+  titlebarWindow.webContents.loadFile(path.join(global.paths.app, 'ui', 'titlebar.html'));
+  const PageView = (global.PageView = new WebContentsView({
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(global.paths.app, 'ui', 'preload.js'),
-      session: global.session,
+      session: global.ses
     },
   }));
-  mainWindow.setBrowserView(PageView);
   PageView.webContents.loadURL(global.urls.main);
-  PageView.setBounds({
-    x: 0,
-    y: 30,
-    width: mainWindow.isMaximized() ? mainWindow.getBounds().width - 16 : mainWindow.getBounds().width,
-    height: mainWindow.getBounds().height - 30,
-  });
-  mainWindow.on("resize", () => {
+  mainWindow.contentView.addChildView(titlebarWindow);
+  mainWindow.contentView.addChildView(PageView);
+  mainWindow.setMenu(null);
+
+  function updateViewBounds() {
+    const contentBounds = mainWindow.contentView.getBounds();
+    const contentWidth = Math.round(contentBounds.width);
+    const contentHeight = Math.round(contentBounds.height);
+
+    // On macOS, offset the title bar slightly to account for the traffic lights
+    const titleBarHeight = 30;
+    const titleBarOffset = process.platform === 'darwin' ? titleBarHeight - 2 : 0;
+    const pageViewHeight = Math.max(0, contentHeight - titleBarHeight);
+
+    titlebarWindow.setBounds({
+      x: 0,
+      y: titleBarOffset,
+      width: contentWidth,
+      height: titleBarHeight,
+    });
+
     PageView.setBounds({
       x: 0,
-      y: 30,
-      width: mainWindow.isMaximized() ? mainWindow.getBounds().width - 16 : mainWindow.getBounds().width,
-      height: mainWindow.getBounds().height - 30,
+      y: titleBarHeight + titleBarOffset,
+      width: contentWidth,
+      height: pageViewHeight,
     });
+  }
+
+  // Basic resize
+  mainWindow.on("resize", updateViewBounds);
+
+  // On maximize/unmaximize, delay slightly to ensure full layout
+  mainWindow.on("maximize", () => setTimeout(updateViewBounds, 50));
+  mainWindow.on("unmaximize", () => setTimeout(updateViewBounds, 50));
+
+  // Save window state on close
+  mainWindow.on("close", (event) => {
+    mainWindowState.saveState(mainWindow);
+
+    if (global.app_settings?.trayOptions?.closeToTray === true && !global.config.runtime.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
   });
 
-  // Context Menu:
-  contextMenu({
-    labels: {
-      showSaveImage: 'Download Image',
-      showSaveVideo: 'Download Video',
-      showSaveAudio: 'Download Audio',
-      showCopyLink: 'Copy Link',
-      showCopyImage: 'Copy Image',
-      showInspectElement: 'Inspect Element'
-    },
-    showSelectAll: false,
-    showSaveImage: true,
-    showSaveVideo: true,
-    showSaveAudio: true,
-    showCopyLink: true,
-    showCopyImage: false,
-    showInspectElement: !app.isPackaged,
-    window: PageView
-  });
+  // Set initial bounds
+  setImmediate(updateViewBounds);
 
   // Badge count: (use mainWindow as that shows the badge on the taskbar)
-  new badge(mainWindow, badgeOptions);
+  new badge(mainWindow, global.app_settings.badgeOptions);
 
   logger.log("Main Window Created, Showing splashscreen");
   splash.show();
-  //mainWindow.show();
 
   logger.log("Attaching Titlebar to Main Window");
-  attachTitlebarToWindow(mainWindow);
+  attachTitlebarToWindow(titlebarWindow);
 
   // DevTools:
-  //mainWindow.webContents.openDevTools();
-  //PageView.webContents.openDevTools();
   //splash.webContents.openDevTools();
+  //mainWindow.webContents.openDevTools();
+  //titlebarWindow.webContents.openDevTools();
+  //PageView.webContents.openDevTools();
 
   logger.log("Initializing @electron/remote");
   electronremote.initialize();
-  electronremote.enable(mainWindow.webContents);
+  //electronremote.enable(titlebarWindow.webContents);
   electronremote.enable(PageView.webContents);
 
   // PageView Events:
-  PageView.webContents.on('did-finish-load', () => {
-    if (!global.isUpdating) {
-      // Show the main window
-      mainWindow.show();
-      // Hide the splash screen
-      splash.destroy();
-    };
-  });
   PageView.webContents.setWindowOpenHandler(({ url }) => {
-    new BrowserWindow({ show: true, autoHideMenuBar: true, icon: path.join(global.paths.app, 'ui', 'images', 'logo.png') }).loadURL(url);
+    new BrowserWindow({ show: true, autoHideMenuBar: true, icon: path.join(global.paths.app, 'ui', 'img', 'logo.png') }).loadURL(url);
     return { action: 'deny' };
   });
-  // Log PageView navigations:
-  /*PageView.webContents.on('will-navigate', (event, url) => {
-    logger.log(`Navigating to: ${url}`);
-  });
-  PageView.webContents.on('did-navigate-in-page', (event, url) => {
-    logger.log(`Navigated to: ${url}`);
-  });*/
 };
 
 function showAboutWindow() {
-  openAboutWindow({
-    icon_path: path.join(global.paths.app, 'ui', 'images', 'bsky-logo.svg'),
+  AboutWindow({
+    //open_devtools: isDev,
+    icon_path: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
     package_json_dir: global.paths.app_root,
     product_name: global.appInfo.name,
-    //open_devtools: process.env.NODE_ENV !== 'production',
+    license: global.appInfo.license,
+    css_path: path.join('styles', 'ui-dark.css'),
     use_version_info: [
       ['Application Version', `${global.appInfo.version}`],
       ['Contributors', contributors.map((contributor) => contributor.name).join(', ')],
     ],
-    license: `MIT, GPL-2.0, GPL-3.0, ${global.appInfo.license}`,
   });
 };
 
 function createTray() {
   logger.log("Creating Tray");
-  const tray = new Tray(path.join(global.paths.app, 'ui', 'images', 'icons', '32x32.png'));
-  tray.setToolTip('Bsky Desktop');
+  const logoImage = nativeImage.createFromPath(path.join(global.paths.app, 'ui', 'img', 'logo.png')).resize({ width: 16, height: 16 });
+  const tray = new Tray(logoImage);
+  tray.setToolTip(global.appInfo.name);
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: global.appInfo.name, enabled: false },
+    { label: global.appInfo.name, enabled: false, icon: logoImage },
     { type: 'separator' },
     {
       label: 'About', click() {
@@ -364,10 +367,14 @@ function createTray() {
     { label: 'Quit', role: 'quit', click() { app.quit(); } }
   ]));
   tray.on('click', () => {
-    if (mainWindow.isVisible()) {
-      mainWindow.hide();
+    if (global.mainWindow.isVisible() && !global.mainWindow.isFocused()) {
+      global.mainWindow.focus();
     } else {
-      mainWindow.show();
+      global.mainWindow.show();
+      if (global.mainWindow.isMinimized()) {
+        global.mainWindow.restore();
+      }
+      global.mainWindow.focus();
     }
   });
 };
@@ -438,30 +445,96 @@ function handleDeeplink(commandLine) {
   };
 };
 
-// Hanle ui: protocol,
-protocol.registerSchemesAsPrivileged([
+// Register app protocol to handle app:// requests
+function handleAppProtocol(session) {
+  session.protocol.handle('app', async (req) => {
+    const { host, pathname } = new URL(req.url);
+
+    //console.log(`App Protocol Request: host=${host}, pathname=${pathname}`);
+
+    if (host === 'ui') {
+      const baseDir = path.join(__dirname, '..', 'ui');
+      const pathToServe = path.resolve(baseDir, '.' + pathname);
+
+      const relativePath = path.relative(baseDir, pathToServe);
+      const isSafe = relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+
+      if (!isSafe) {
+        return new Response('Bad request', { status: 400 });
+      }
+
+      try {
+        const data = fs.readFileSync(pathToServe);
+        const mimeType = pathname.endsWith('.css') ? 'text/css' : 'application/octet-stream';
+        return new Response(data, {
+          status: 200,
+          headers: { 'Content-Type': mimeType, 'Access-Control-Allow-Origin': '*' }
+        });
+      } catch (error) {
+        //console.error(`Error serving app protocol for ${req.url}:`, error);
+        return new Response('File not found', { status: 404 });
+      }
+    } else {
+      //console.warn(`Unhandled app protocol host: ${host}`);
+      return new Response('Not found', { status: 404 });
+    }
+  });
+}
+
+const secureAppProtocol = [
   {
-    scheme: 'ui',
+    scheme: 'app',
     privileges: {
+      standard: true,
       secure: true,
       supportFetchAPI: true,
       bypassCSP: true
     }
   }
-]);
+];
+protocol.registerSchemesAsPrivileged(secureAppProtocol);
 
 // Main App Events:
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  logger.log('App reports ready, Checking if packaged...');
+  // Check if app is run from the installer dmg (macOS)
+  if (process.platform === 'darwin' && app.isPackaged && !app.isInApplicationsFolder()) {
+    const { response } = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Move to Applications folder', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Move to Applications folder',
+      message: 'To ensure the app works correctly, please move it to the Applications folder. Would you like to do that now?'
+    });
+
+    if (response === 0) {
+      app.moveToApplicationsFolder();
+    } else {
+      await dialog.showMessageBox({
+        type: 'error',
+        buttons: ['OK'],
+        title: 'Move to Applications folder',
+        message: 'Please move the app to the Applications folder to ensure it works correctly.'
+      });
+      return app.quit(); // Prevent further execution
+    }
+  };
+
   logger.log("App Ready, Ensuring singleInstanceLock and registering deeplink");
   const gotTheLock = app.requestSingleInstanceLock();
   if (gotTheLock) {
     logger.log("SingleInstanceLock Acquired, Registering deeplink");
     if (process.defaultApp) {
       if (process.argv.length >= 2) {
-        app.setAsDefaultProtocolClient(global.appInfo.deeplink, process.execPath, [path.resolve(process.argv[1])])
+        global.appInfo.deeplink.forEach((protocol) => {
+          app.setAsDefaultProtocolClient(protocol, process.execPath, [path.resolve(process.argv[1])])
+        });
       }
     } else {
-      app.setAsDefaultProtocolClient(global.appInfo.deeplink)
+      global.appInfo.deeplink.forEach((protocol) => {
+        app.setAsDefaultProtocolClient(protocol)
+      });
     };
     if (!process.defaultApp && process.argv.length >= 2) {
       logger.log("Handling deeplink from commandline");
@@ -470,14 +543,24 @@ app.whenReady().then(() => {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
       logger.log("Second Instance Detected, handling");
       handleDeeplink(commandLine);
-      /*if (global.mainWindow) {
+      if (global.mainWindow) {
         if (global.mainWindow.isMinimized()) global.mainWindow.restore();
+        if (!global.mainWindow.isVisible()) global.mainWindow.show();
         global.mainWindow.focus();
-      };*/
+      };
     });
 
+    // Check if safeStorage is available:
+    if (safeStorage.isEncryptionAvailable()) {
+      logger.log("SafeStorage is available, enabling encryption.");
+      global.safeStorage = safeStorage;
+    } else {
+      logger.warn("SafeStorage is not available, encryption will not be used.");
+      global.safeStorage = require('./module/safeStorage');
+    };
+
     // Create persistent session for the app:
-    const ses = session.fromPath(path.join(global.paths.data, 'session'), {
+    global.ses = session.fromPath(path.join(global.paths.data, 'session'), {
       cache: true,
       partition: 'persist:bsky',
       allowRunningInsecureContent: false,
@@ -491,52 +574,12 @@ app.whenReady().then(() => {
       preload: path.join(global.paths.app, 'ui', 'preload.js'),
     });
 
+    // Handle app protocol
+    handleAppProtocol(global.ses);
+    handleAppProtocol(session.defaultSession);
+
     // Set UserAgent:
     ses.setUserAgent(`Mozilla/5.0 bsky-desktop/${global.appInfo.version} (Electron:${process.versions.electron};) Chrome:${process.versions.chrome};`);
-
-    // Handle ui: protocol,
-    ses.protocol.handle('ui', (req) => {
-      // Log the incoming request URL for debugging
-      //console.log('Request URL:', req.url);
-
-      // Construct the correct file path
-      const pathToMedia = path.join(__dirname, '..', 'ui', req.url.substring(5));
-      //console.log('Path to media:', pathToMedia); // Log the resolved path
-
-      // Determine MIME type based on the file extension
-      const mimeType = req.url.endsWith('.css') ? 'text/css' :
-        req.url.endsWith('.js') ? 'text/javascript' :
-          req.url.endsWith('.png') ? 'image/png' :
-            req.url.endsWith('.svg') ? 'image/svg+xml' :
-              req.url.endsWith('.html') ? 'text/html' : 'application/octet-stream';  // Default binary mime type
-
-      try {
-        // Attempt to read the file synchronously
-        const media = fs.readFileSync(pathToMedia);
-
-        // Log success and return the response
-        //console.log('File found and served successfully');
-        return new Response(media, { // Pass the Buffer (binary data) as the body
-          status: 200,
-          headers: {
-            'Content-Type': mimeType,
-            'Access-Control-Allow-Origin': '*'
-          }
-        });
-
-      } catch (error) {
-        // Log the error if file is not found
-        console.error('Error reading file:', error);
-
-        return new Response('File not found', { // Send plain text error if file not found
-          status: 404,
-          headers: { 'Content-Type': 'text/plain' }
-        });
-      }
-    });
-
-    // Set session:
-    global.session = ses;
 
     // Handle ipc for render:
     ipcMain.on('close-app', (event, arg) => {
@@ -727,6 +770,27 @@ app.whenReady().then(() => {
               await Promise.all(userStylePromises);
             }
           }
+
+          const onPageLoaded = () => {
+            setTimeout(() => {
+              global.config.runtime.isReady = true;
+
+              if (!global.PageView.webContents.isLoading()) {
+                setTimeout(() => {
+                  global.mainWindow.show();
+                  global.splash.destroy();
+                  global.mainWindow.focus();
+                }, 1000);
+              }
+            }, 1000);
+          };
+
+          // Add event listener for PageView
+          global.PageView.webContents.on('did-finish-load', onPageLoaded);
+
+          // All done, we're ready to show the main window (when the page is loaded)
+          global.splash.webContents.send('ui:progtext', { title: 'Loading app...', subtitle: ' ' });
+          global.config.runtime.isReady = true;
         });
       });
     });

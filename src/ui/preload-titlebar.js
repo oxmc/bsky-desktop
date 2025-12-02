@@ -1,10 +1,10 @@
-const { Titlebar, TitlebarColor } = require("../app/titlebar");
+const { Titlebar, TitlebarColor } = require("../app/module/titlebar");
 const path = require("path");
 
 window.addEventListener('DOMContentLoaded', () => {
   // Title bar:
   const options = {
-    icon: path.join(__dirname, 'images', 'logo.ico'),
+    icon: path.join(__dirname, 'img', 'logo.ico'),
     iconSize: 20,
     backgroundColor: TitlebarColor.fromHex('#283646'),
     titleHorizontalAlignment: 'center',
