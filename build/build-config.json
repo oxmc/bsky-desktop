@@ -11,7 +11,7 @@
             "pkg",
             "zip"
         ],
-        "icon": "src/ui/images/mac.icns",
+        "icon": "src/ui/img/mac.icns",
         "category": "Network"
     },
     "pkg": {
@@ -30,7 +30,7 @@
             "rpm",
             "zip"
         ],
-        "icon": "src/ui/images/icons",
+        "icon": "src/ui/img/icons",
         "category": "Network"
     },
     "win": {
@@ -40,7 +40,7 @@
             "msi",
             "zip"
         ],
-        "icon": "src/ui/images/logo.ico"
+        "icon": "src/ui/img/logo.ico"
     },
     "appx": {
         "identityName": "BskyDesktop"

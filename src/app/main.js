@@ -25,7 +25,7 @@ const AboutWindow = require("./module/about-window/src/index").default;
 const badge = require('./module/badge');
 const autoUpdater = require('./module/updater/auto-update');
 const loadCRX = require('./utils/loadCRX');
-const userStyles = require('./utils/userstyles');
+const userStyles = require('./utils/userStyles');
 
 // Development mode check:
 const isDev = !app.isPackaged && (fs.existsSync(path.join(global.paths.data, ".dev")) || fs.existsSync(path.join(global.paths.data, ".debug")));
@@ -618,7 +618,7 @@ app.whenReady().then(async () => {
               global.splash.webContents.send('ui:progtext', { title: 'Update available', subtitle: 'Downloading update' });
               try {
                 const update = await autoUpdater.downloadUpdate();
-                //console.log(update);
+                console.log(update);
                 if (update.err && update.err.code === 'unpackaged') {
                   logger.warn("Update failed to download, unpackaged app");
                   global.splash.webContents.send('ui:progtext', { title: 'Not downloading update', subtitle: 'Unpackaged app' });

@@ -36,6 +36,16 @@ const updateUrl = config.app.serverUrl + '/update';
 const asarUpdateUrl = updateUrl + '/core';
 const downloadUrl = config.app.serverUrl + '/dl';
 
+// Default axios instance
+const axiosInstance = axios.create({
+    timeout: 15000,
+    headers: {
+        'User-Agent': `BskyDesktop/${app.getVersion()} (${systemPlatform}-${systemArch})`,
+        "x-platform": systemPlatform,
+        "x-arch": systemArch
+    }
+});
+
 // Installer path and type (used to save the installer)
 var installerPath = '';
 var installerType = '';
@@ -167,7 +177,7 @@ async function checkForUpdates() {
             } else {
                 // Check for updates, and if there are updates, download and install them
                 logger.log('Checking for updates (win)...');
-                axios.get(asarUpdateUrl).then((res) => {
+                axiosInstance.get(asarUpdateUrl).then((res) => {
                     //console.log(res.data);
                     const latestVersion = res.data.version;
                     const currentVersion = app.getVersion();
@@ -195,7 +205,7 @@ async function checkForUpdates() {
                 logger.log('Checking for updates (mac)...');
 
                 // Check for updates
-                axios.get(asarUpdateUrl).then((res) => {
+                axiosInstance.get(asarUpdateUrl).then((res) => {
                     //console.log(res.data);
                     const latestVersion = res.data.version;
                     const currentVersion = app.getVersion();
@@ -244,7 +254,21 @@ async function downloadUpdate() {
         }
 
         // Get the installer name
-        const installerName = `bsky-desktop-${sys.platform}-${systemArch}.exe`;
+        var installerName = '';
+        switch (systemPlatform) {
+            case 'win':
+                installerName = `bsky-desktop-${sys.platform}-${systemArch}.exe`;
+                break;
+            case 'mac':
+                installerName = `bsky-desktop-${sys.platform}-${systemArch}.dmg`;
+                break;
+            case 'linux':
+                installerName = `bsky-desktop-${sys.platform}-${systemArch}.AppImage`;
+                break;
+            default:
+                installerName = `bsky-desktop-${sys.platform}-${systemArch}.bin`;
+                break;
+        }
         installerPath = path.join(global.paths.updateDir, installerName);
 
         // Detect the installer type
@@ -270,13 +294,11 @@ async function downloadUpdate() {
         const installerStream = fs.createWriteStream(installerPath);
 
         // download the installer
-        axios({
+        axiosInstance({
             method: 'get',
             url: downloadUrl,
             responseType: 'stream',
             headers: {
-                "x-platform": systemPlatform,
-                "x-arch": systemArch,
                 "x-installMethod": installerType
             }
         }).then((res) => {
