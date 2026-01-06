@@ -21,8 +21,28 @@ module.exports = function initConfig(app, packageJson) {
             serverUrl: "https://cdn.oxmc.me/apps/bsky-desktop"
         },
 
-        // App Settings
+        // App Settings (Internal - not user configurable)
         app_settings: {},
+
+        // User Settings (User configurable - saved to config.json)
+        user_settings: {
+            updates: {
+                autoCheck: true,
+                autoDownload: false,
+                autoInstallOnQuit: true,
+                checkInterval: 3600000, // 1 hour in milliseconds
+                channel: 'latest' // latest, beta
+            },
+            appearance: {
+                closeToTray: false,
+                startMinimized: false,
+                hardwareAcceleration: true
+            },
+            badge: {
+                enabled: true,
+                useSystemAccent: true
+            }
+        },
 
         // Paths
         paths: {}, // Will be populated below
@@ -44,7 +64,7 @@ module.exports = function initConfig(app, packageJson) {
             color: '#FF0000', // The background color
             radius: 48, // The radius for the badge circle. You shouldn't have to change this at all
             useSystemAccentTheme: true, // Use the system accent color for the badge
-            updateBadgeEvent: 'ui:badgeCount', // The IPC event name to listen on
+            updateBadgeEvent: 'ui:badgeUpdate', // The IPC event name to listen on
             badgeDescription: 'Unread Notifications', // The badge description
             invokeType: 'send', // The IPC event type
             max: 9, // The maximum integer allowed for the badge. Anything above this will have "+" added to the end of it.
@@ -79,7 +99,6 @@ module.exports = function initConfig(app, packageJson) {
 
     // Paths (User)
     config.paths.user = path.join(config.paths.data, 'user');
-    config.paths.updateDir = path.join(config.paths.user, 'update');
     config.paths.extensions = path.join(config.paths.user, 'extensions');
     config.paths.userstyles = path.join(config.paths.user, 'userstyles');
 

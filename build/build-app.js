@@ -1,7 +1,6 @@
 const path = require('path');
 const process = require('process');
 const builder = require('electron-builder');
-const { Platform, Arch } = builder;
 
 // Parse command-line arguments
 const supportedPlatforms = ['win', 'mac', 'linux'];
@@ -9,8 +8,8 @@ const supportedArchitectures = ['x64', 'armv7l', 'arm64', 'ia32', 'universal'];
 const args = process.argv.slice(2);
 const carch = args.includes('--arch') ? args[args.indexOf('--arch') + 1] : null;
 const cplatform = args.includes('--platform') ? args[args.indexOf('--platform') + 1] : null;
-const pack = args.includes('--pack');  // Keep track of --pack as a boolean flag
-const nobc = args.includes('--no-bc');  // Keep track of --nobc as a boolean flag
+const pack = args.includes('--pack');
+const nobc = args.includes('--no-bc');
 
 // Determine platform
 let platform;
@@ -34,17 +33,17 @@ if (!supportedArchitectures.includes(arch)) {
 
 // Map platform and architecture to electron-builder enums
 const platformEnum = {
-    win: Platform.WINDOWS,
-    mac: Platform.MAC,
-    linux: Platform.LINUX
+    win: builder.Platform.WINDOWS,
+    mac: builder.Platform.MAC,
+    linux: builder.Platform.LINUX
 }[platform];
 
 const archEnum = {
-    x64: Arch.x64,
-    armv7l: Arch.armv7l,
-    arm64: Arch.arm64,
-    ia32: Arch.ia32,
-    universal: Arch.universal
+    x64: builder.Arch.x64,
+    armv7l: builder.Arch.armv7l,
+    arm64: builder.Arch.arm64,
+    ia32: builder.Arch.ia32,
+    universal: builder.Arch.universal
 }[arch];
 
 // Additional build arguments: (starting with --eb-)
