@@ -71,14 +71,14 @@ function updateBadgeCount() {
         if (badgeText && !isNaN(parseInt(badgeText, 10))) {
             const newCount = parseInt(badgeText, 10);
             console.log(`Badge count updated: ${newCount}`);
-            badge.update(newCount);
+            window.ipc.send('ui:badgeUpdate', newCount); // Send the new badge count
         } else {
             console.log("Badge element exists but no valid count. Clearing badge count...");
-            badge.update(0); // Clear the badge count
+            window.ipc.send('ui:badgeUpdate', 0); // Clear the badge count
         }
     } else {
         console.log("No notification element found. Clearing badge count...");
-        badge.update(0); // Clear the badge count
+        window.ipc.send('ui:badgeUpdate', 0); // Clear the badge count
     }
 }
 

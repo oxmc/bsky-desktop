@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
-const allowedChannels = ["ui:badgeCount", "ui:notif", "ui:settings", "ui:openSettings", "app:restart"];
+const allowedChannels = ["ui:badgeCount", "ui:badgeUpdate", "ui:notif", "ui:settings", "ui:openSettings", "app:restart", "app:notification"];
 
 // Expose ipcRenderer to the renderer process
 contextBridge.exposeInMainWorld("ipc", {
@@ -15,6 +15,19 @@ contextBridge.exposeInMainWorld("ipc", {
             ipcRenderer.on(channel, (event, ...args) => callback(...args));
         }
     },
+    invoke: async (channel, data) => {
+        const allowedInvokeChannels = ['app:getSettings', 'app:saveSettings'];
+        if (allowedInvokeChannels.includes(channel)) {
+            return await ipcRenderer.invoke(channel, data);
+        } else {
+            console.warn(`[Preload] Invoke channel not allowed: ${channel}`);
+            throw new Error(`Channel not allowed: ${channel}`);
+        }
+    },
+    // Desktop notification helper
+    notify: (options) => {
+        ipcRenderer.send('app:notification', options);
+    }
 });
 
 // Load a script asynchronously
@@ -46,7 +59,7 @@ function injectCSS(href) {
 document.addEventListener("DOMContentLoaded", async () => {
     injectCSS("app://ui/lib/izitoast.min.css");
     injectCSS("app://ui/rend/extra-themes.css");
-    injectCSS("app://ui/css/fa/6.7.1/css/all.min.css");
+    injectCSS("app://ui/lib/fa/6.7.1/css/all.min.css");
 
     try {
         await loadScriptAsync("app://ui/lib/jquery-3.3.1.min.js");
@@ -55,6 +68,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadScriptAsync("app://ui/rend/register-handles.js");
         await loadScriptAsync("app://ui/rend/bsky-ext.js");
         await loadScriptAsync("app://ui/rend/specialAnimations.js");
+        await loadScriptAsync("app://ui/rend/app-settings-modal.js");
+        await loadScriptAsync("app://ui/rend/app-settings-injector.js");
     } catch (error) {
         console.error("Failed to load one or more scripts.", error);
     }

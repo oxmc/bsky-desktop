@@ -34,11 +34,29 @@ jobs:
       - name: Build (armv7l)
         run: npm run build -- --arch armv7l
 
+      - name: Rename yml (armv7l)
+        run: |
+          if [ -f dist/latest-linux.yml ]; then
+            mv dist/latest-linux.yml dist/latest-linux-armv7l.yml
+          fi
+
       - name: Build (x64)
         run: npm run build -- --arch x64
 
+      - name: Rename yml (x64)
+        run: |
+          if [ -f dist/latest-linux.yml ]; then
+            mv dist/latest-linux.yml dist/latest-linux-x64.yml
+          fi
+
       - name: Build (arm64)
         run: npm run build -- --arch arm64
+
+      - name: Rename yml (arm64)
+        run: |
+          if [ -f dist/latest-linux.yml ]; then
+            mv dist/latest-linux.yml dist/latest-linux-arm64.yml
+          fi
 
       - name: Download appimagelint and its deps
         run: |
@@ -90,11 +108,26 @@ jobs:
       - name: Build (ia32)
         run: npm run build -- --arch ia32
 
+      - name: Rename yml (ia32)
+        run: |
+          if (Test-Path dist/latest.yml) { Rename-Item -Path dist/latest.yml -NewName latest-win-ia32.yml }
+        shell: pwsh
+
       - name: Build (x64)
         run: npm run build -- --arch x64
+
+      - name: Rename yml (x64)
+        run: |
+          if (Test-Path dist/latest.yml) { Rename-Item -Path dist/latest.yml -NewName latest-win-x64.yml }
+        shell: pwsh
       
       - name: Build (arm64)
         run: npm run build -- --arch arm64
+
+      - name: Rename yml (arm64)
+        run: |
+          if (Test-Path dist/latest.yml) { Rename-Item -Path dist/latest.yml -NewName latest-win-arm64.yml }
+        shell: pwsh
       
       - name: Generate checksum
         run: |
@@ -137,13 +170,24 @@ jobs:
       - name: Build (x64)
         run: npm run build -- --arch x64
 
+      - name: Rename yml (x64)
+        run: |
+          if [ -f dist/latest-mac.yml ]; then
+            mv dist/latest-mac.yml dist/latest-mac-x64.yml
+          fi
+
       - name: Build (arm64)
         run: npm run build -- --arch arm64
+
+      - name: Rename yml (arm64)
+        run: |
+          if [ -f dist/latest-mac.yml ]; then
+            mv dist/latest-mac.yml dist/latest-mac-arm64.yml
+          fi
       
       - name: Generate checksum
         run: |
           shasum -a 256 dist/*.dmg > dist/sha256sum.txt
-          shasum -a 256 dist/*.pkg >> dist/sha256sum.txt
           shasum -a 256 dist/*.zip >> dist/sha256sum.txt
 
       - name: Upload macOS Artifacts
@@ -153,7 +197,6 @@ jobs:
           name: macos-artifacts
           path: |
             dist/*.dmg
-            dist/*.pkg
             dist/*.zip
             dist/latest*.yml
             dist/sha256sum.txt
@@ -212,13 +255,15 @@ jobs:
             dist/linux/*.deb
             dist/linux/*.zip
             dist/linux/*.rpm
+            dist/linux/*.yml
             dist/windows/*.exe
             dist/windows/*.msi
             dist/windows/*.appx
             dist/windows/*.zip
+            dist/windows/*.yml
             dist/macos/*.dmg
-            dist/macos/*.pkg
             dist/macos/*.zip
+            dist/macos/*.yml
             sha256sums.txt
 
   aur:

@@ -2,26 +2,18 @@
     "appId": "com.oxmc.bskyDesktop",
     "productName": "bskyDesktop",
     "asarUnpack": [
-        "./node_modules/node-notifier/**/*"
+        "./node_modules/node-notifier/**/*",
+        "./node_modules/@oxmc/node-gpuinfo/dist/**/*",
+        "./node_modules/@oxmc/node-smbios/dist/**/*"
     ],
     "removePackageScripts": true,
     "mac": {
         "target": [
             "dmg",
-            "pkg",
             "zip"
         ],
         "icon": "src/ui/img/mac.icns",
         "category": "Network"
-    },
-    "pkg": {
-        "installLocation": "/Applications",
-        "allowAnywhere": true,
-        "allowCurrentUserHome": true,
-        "allowRootDirectory": true,
-        "isVersionChecked": true,
-        "isRelocatable": false,
-        "overwriteAction": "upgrade"
     },
     "linux": {
         "target": [

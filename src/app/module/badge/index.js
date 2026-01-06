@@ -36,17 +36,30 @@ let currentNumber = null;
  */
 module.exports = class Badge {
     constructor(win, opts = {}) {
-        this.win = win;
+        // Handle case where win is a BrowserWindow with WebContentsView children
+        // If drawingWebContents is provided, use it for badge generation
+        if (opts.drawingWebContents) {
+            this.win = win; // The actual window for setOverlayIcon
+            this.drawingWin = {
+                webContents: opts.drawingWebContents,
+                setOverlayIcon: (image, description) => win.setOverlayIcon(image, description),
+                on: (event, callback) => win.on(event, callback),
+                isDestroyed: () => win.isDestroyed()
+            };
+        } else {
+            this.win = win;
+            this.drawingWin = win;
+        }
         this.opts = opts;
 
         // Get native accent color
         const accentColor = getNativeAccentColor();
-        this.generator = new BadgeGenerator(win, opts, accentColor);
+        this.generator = new BadgeGenerator(this.drawingWin, opts, accentColor);
 
         if (process.platform === 'win32' || process.platform === 'darwin') {
             systemPreferences.on('accent-color-changed', () => {
                 const newAccentColor = getNativeAccentColor();
-                this.generator = new BadgeGenerator(win, opts, newAccentColor);
+                this.generator = new BadgeGenerator(this.drawingWin, opts, newAccentColor);
                 this.generator.generate(currentNumber, true);
                 this.update(currentNumber);
             });
@@ -84,8 +97,12 @@ module.exports = class Badge {
                 };
                 if (process.platform === 'win32' || process.platform === 'darwin') {
                     this.win.setOverlayIcon(currentOverlayIcon.image, currentOverlayIcon.badgeDescription);
+                } else {
+                    console.log(`[Badge] Platform ${process.platform} not supported for overlay icons`);
                 }
                 currentNumber = badgeNumber;
+            }).catch((err) => {
+                console.error(`[Badge] Error generating badge:`, err);
             });
         } else {
             currentOverlayIcon = {
