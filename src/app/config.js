@@ -24,23 +24,18 @@ module.exports = function initConfig(app, packageJson) {
         // App Settings (Internal - not user configurable)
         app_settings: {},
 
-        // User Settings (User configurable - saved to config.json)
+        // Updater configuration. The user-facing switches (automatic checks, downloads,
+        // install on quit) are settings: see src/app/utils/settings.js
         user_settings: {
             updates: {
-                autoCheck: true,
-                autoDownload: false,
-                autoInstallOnQuit: true,
                 checkInterval: 3600000, // 1 hour in milliseconds
-                channel: 'latest' // latest, beta
-            },
-            appearance: {
-                closeToTray: false,
-                startMinimized: false,
-                hardwareAcceleration: true
-            },
-            badge: {
-                enabled: true,
-                useSystemAccent: true
+                // Release feeds are on GitHub (.github/workflows/build-and-release.yml). Windows
+                // builds of every arch share a release, so their feeds are latest-win-<arch>.yml;
+                // Linux and macOS use electron-updater's own names (latest-linux.yml,
+                // latest-linux-arm64.yml, latest-mac.yml).
+                channel: process.platform === 'win32' ? `latest-win-${process.arch}` : 'latest',
+                provider: 'generic',
+                feedUrl: 'https://github.com/oxmc/bsky-desktop/releases/latest/download/',
             }
         },
 
@@ -99,6 +94,7 @@ module.exports = function initConfig(app, packageJson) {
 
     // Paths (User)
     config.paths.user = path.join(config.paths.data, 'user');
+    config.paths.updateDir = path.join(config.paths.user, 'update');
     config.paths.extensions = path.join(config.paths.user, 'extensions');
     config.paths.userstyles = path.join(config.paths.user, 'userstyles');
 

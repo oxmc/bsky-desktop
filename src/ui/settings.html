@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Settings</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.oxmc.me; font-src 'self';" />
+    <link rel="stylesheet" href="./lib/fa/6.7.1/css/all.min.css" />
+    <link rel="stylesheet" href="./css/settings.css" />
+</head>
+
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-top drag">
+            <div class="sidebar-title">Settings</div>
+        </div>
+        <nav class="sidebar-list" aria-label="Settings sections">
+            <button class="nav-item selected" data-page="general">
+                <span class="nav-icon" style="--icon-bg: #8e8e93"><i class="fa-solid fa-gear"></i></span>General
+            </button>
+            <button class="nav-item" data-page="appearance">
+                <span class="nav-icon" style="--icon-bg: #5e5ce6"><i class="fa-solid fa-circle-half-stroke"></i></span>Appearance
+            </button>
+            <button class="nav-item" data-page="updates">
+                <span class="nav-icon" style="--icon-bg: #0a84ff"><i class="fa-solid fa-arrows-rotate"></i></span>Software Update
+            </button>
+            <button class="nav-item" data-page="about">
+                <span class="nav-icon" style="--icon-bg: #30b0c7"><i class="fa-solid fa-circle-info"></i></span>About
+            </button>
+        </nav>
+    </aside>
+
+    <main class="content">
+        <header class="content-header drag">
+            <h1 id="page-title">General</h1>
+            <button class="close-button no-drag" id="close-window" title="Close" aria-label="Close settings">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </header>
+
+        <div class="pages">
+            <!-- General -->
+            <section class="page" data-page="general">
+                <div class="group">
+                    <div class="row">
+                        <div class="row-text">
+                            <div class="row-title">Close to tray</div>
+                            <div class="row-subtitle">Keep running in the tray when the window is closed</div>
+                        </div>
+                        <label class="switch"><input type="checkbox" data-setting="general.closeToTray"><span></span></label>
+                    </div>
+                    <div class="row">
+                        <div class="row-text">
+                            <div class="row-title">Accent-colored badge</div>
+                            <div class="row-subtitle">The unread badge uses the system accent color (applies after a restart)</div>
+                        </div>
+                        <label class="switch"><input type="checkbox" data-setting="badge.useSystemAccent"><span></span></label>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Appearance -->
+            <section class="page" data-page="appearance" hidden>
+                <div class="group" id="gtk-theme-group" hidden>
+                    <div class="row">
+                        <div class="row-text">
+                            <div class="row-title">Use GTK theme colors</div>
+                            <div class="row-subtitle" id="gtk-theme-detail">The titlebar and light/dark mode follow your desktop theme</div>
+                        </div>
+                        <label class="switch"><input type="checkbox" data-setting="appearance.useGtkTheme"><span></span></label>
+                    </div>
+                </div>
+
+                <h2 class="group-title">Userstyles</h2>
+                <div class="group" id="userstyle-list"></div>
+                <div class="button-row">
+                    <button class="push-button" id="add-userstyle">Add Userstyle…</button>
+                    <button class="push-button" id="open-userstyles">Open Folder</button>
+                </div>
+                <p class="footnote" id="userstyles-note">UserCSS (.user.css) files, applied on top of the page. LESS and Stylus userstyles are supported.</p>
+            </section>
+
+            <!-- Software Update -->
+            <section class="page" data-page="updates" hidden>
+                <div class="group">
+                    <div class="row update-card">
+                        <img class="app-icon" src="./img/logo.png" alt="">
+                        <div class="row-text">
+                            <div class="row-title" id="update-name">App</div>
+                            <div class="row-subtitle" id="update-status">Version —</div>
+                        </div>
+                        <button class="push-button" id="check-updates">Check Now</button>
+                    </div>
+                </div>
+                <div class="group">
+                    <div class="row">
+                        <div class="row-title">Check for updates automatically</div>
+                        <label class="switch"><input type="checkbox" data-setting="updates.autoCheck"><span></span></label>
+                    </div>
+                    <div class="row">
+                        <div class="row-text">
+                            <div class="row-title">Download updates automatically</div>
+                            <div class="row-subtitle">Updates found at startup are installed before the app opens</div>
+                        </div>
+                        <label class="switch"><input type="checkbox" data-setting="updates.autoDownload"><span></span></label>
+                    </div>
+                    <div class="row">
+                        <div class="row-title">Install updates when quitting</div>
+                        <label class="switch"><input type="checkbox" data-setting="updates.autoInstallOnQuit"><span></span></label>
+                    </div>
+                </div>
+                <p class="footnote" id="install-note"></p>
+            </section>
+
+            <!-- About -->
+            <section class="page" data-page="about" hidden>
+                <div class="about-hero">
+                    <img class="about-icon" src="./img/logo.png" alt="">
+                    <div class="about-name" id="about-name">App</div>
+                    <div class="about-version" id="about-version">Version —</div>
+                </div>
+                <div class="group" id="about-details"></div>
+                <div class="group" id="website-group">
+                    <button class="row row-link" id="open-website">
+                        <div class="row-title">Website</div>
+                        <i class="fa-solid fa-arrow-up-right-from-square row-chevron"></i>
+                    </button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="./rend/settings.js"></script>
+</body>
+
+</html>

@@ -1,7 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
-const allowedChannels = ["ui:badgeCount", "ui:badgeUpdate", "ui:notif", "ui:settings", "ui:openSettings", "app:restart", "app:notification"];
+// settings:open opens the settings window (src/app/module/settings)
+const allowedChannels = ["ui:badgeCount", "ui:badgeUpdate", "ui:notif", "ui:settings", "ui:openSettings", "app:restart", "app:notification", "settings:open", "titlebar:setTitle", "titlebar:setColor"];
 
 // Expose ipcRenderer to the renderer process
 contextBridge.exposeInMainWorld("ipc", {
@@ -13,15 +14,6 @@ contextBridge.exposeInMainWorld("ipc", {
     on: (channel, callback) => {
         if (allowedChannels.includes(channel)) {
             ipcRenderer.on(channel, (event, ...args) => callback(...args));
-        }
-    },
-    invoke: async (channel, data) => {
-        const allowedInvokeChannels = ['app:getSettings', 'app:saveSettings'];
-        if (allowedInvokeChannels.includes(channel)) {
-            return await ipcRenderer.invoke(channel, data);
-        } else {
-            console.warn(`[Preload] Invoke channel not allowed: ${channel}`);
-            throw new Error(`Channel not allowed: ${channel}`);
         }
     },
     // Desktop notification helper
@@ -47,14 +39,33 @@ function loadScriptAsync(src) {
     });
 }
 
-// Inject CSS into the DOM
+// Inject CSS into the DOM (before the userstyles, which stay last)
 function injectCSS(href) {
     const css = document.createElement('link');
     css.rel = 'stylesheet';
     css.href = href;
-    document.head.appendChild(css);
+    document.head.insertBefore(css, userstyleElement?.parentNode === document.head ? userstyleElement : null);
     console.log(`Injected CSS: ${href}`);
 }
+
+// Userstyles compiled by the main process (src/app/module/userstyles). Kept as the last
+// stylesheet in <head> so they override the page, as in the Stylus extension.
+let userstyleElement = null;
+function keepUserstylesLast() {
+    if (userstyleElement && document.head.lastElementChild !== userstyleElement) {
+        document.head.appendChild(userstyleElement);
+    }
+}
+ipcRenderer.on("userstyles:apply", (event, cssList) => {
+    if (!document.head) return;
+    if (!userstyleElement) {
+        userstyleElement = document.createElement("style");
+        userstyleElement.id = "app-userstyles";
+        new MutationObserver(keepUserstylesLast).observe(document.head, { childList: true });
+    }
+    userstyleElement.textContent = cssList.join("\n");
+    keepUserstylesLast();
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
     injectCSS("app://ui/lib/izitoast.min.css");
@@ -68,7 +79,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadScriptAsync("app://ui/rend/register-handles.js");
         await loadScriptAsync("app://ui/rend/bsky-ext.js");
         await loadScriptAsync("app://ui/rend/specialAnimations.js");
-        await loadScriptAsync("app://ui/rend/app-settings-modal.js");
+        // "Desktop App" entry in Bluesky's settings, opens the settings window
         await loadScriptAsync("app://ui/rend/app-settings-injector.js");
     } catch (error) {
         console.error("Failed to load one or more scripts.", error);

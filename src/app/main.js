@@ -1,13 +1,11 @@
-const { app, BrowserWindow, WebContentsView, safeStorage, globalShortcut, ipcMain, Tray, Menu, protocol, session, dialog, nativeImage } = require("electron");
+const { app, BrowserWindow, WebContentsView, safeStorage, globalShortcut, ipcMain, Tray, Menu, protocol, session, dialog, nativeImage, nativeTheme } = require("electron");
 const electronremote = require("@electron/remote/main");
-const { autoUpdater } = require('electron-updater');
 const notifier = require('node-notifier');
 const admzip = require("adm-zip");
 const log4js = require("log4js");
-const GPUInfo = require('@oxmc/node-gpuinfo');
-const SMBIOS = require('@oxmc/node-smbios');
-const detectRpi = require('detect-rpi');
+const { applyCommandLineFlags, startMemoryMonitor, getRecommendedWebPreferences, attachWindowMemoryOptimizations } = require('electron-performance');
 const path = require("path");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 require('v8-compile-cache');
@@ -26,10 +24,15 @@ global.urls = config.urls;
 // Local modules
 const windowStateKeeper = require("./module/window-state/index");
 const { setupTitlebar, attachTitlebarToWindow } = require("./module/titlebar/main");
-const AboutWindow = require("./module/about-window/src/index").default;
+const { initAboutWindow, openAboutWindow } = require("./module/about-window/src/index");
 const badge = require('./module/badge');
+const autoUpdater = require('./module/updater/auto-update');
 const loadCRX = require('./utils/loadCRX');
-const userStyles = require('./utils/userStyles');
+const linuxSandbox = require('./utils/linuxSandbox');
+const appearance = require('./utils/appearance');
+const settings = require('./utils/settings');
+const { initSettingsWindow, openSettingsWindow } = require('./module/settings');
+const { initUserstyles } = require('./module/userstyles');
 
 // Development mode check
 const isDev = !app.isPackaged && (fs.existsSync(path.join(global.paths.data, ".dev")) || fs.existsSync(path.join(global.paths.data, ".debug")));
@@ -60,10 +63,7 @@ log4js.configure({
   }
 });
 const logger = log4js.getLogger("bskydesktop");
-const updaterLogger = log4js.getLogger("bskydesktop-updater");
 logger.level = isDev ? "debug" : "info";
-updaterLogger.level = isDev ? "debug" : "info";
-autoUpdater.logger = updaterLogger;
 // if logfile already exists, rename it unless the lock file is present
 // rotate + zip old logs if present
 if (fs.existsSync(logFile) && !fs.existsSync(path.join(global.paths.data, "lockfile"))) {
@@ -127,7 +127,7 @@ if (!fs.existsSync(global.paths.temp)) {
 };
 
 // Create user directory if it does not exist
-if (!fs.existsSync(global.paths.data, 'user')) {
+if (!fs.existsSync(global.paths.user)) {
   logger.info("Creating User Directory");
   fs.mkdirSync(global.paths.user, { recursive: true });
 };
@@ -144,7 +144,13 @@ if (!fs.existsSync(global.paths.userstyles)) {
   fs.mkdirSync(global.paths.userstyles, { recursive: true });
 };
 
-// User config
+// Create update directory if it does not exist
+if (!fs.existsSync(global.paths.updateDir)) {
+  logger.info("Creating Update Directory");
+  fs.mkdirSync(global.paths.updateDir, { recursive: true });
+};
+
+// User config (settings shown in the settings window: src/app/utils/settings.js)
 const userConfigPath = path.join(global.paths.user, 'config.json');
 let userConfig = {};
 if (fs.existsSync(userConfigPath)) {
@@ -155,549 +161,124 @@ if (fs.existsSync(userConfigPath)) {
     logger.error('Failed to parse user config, using defaults:', error);
   }
 }
+global.userConfig = userConfig;
+settings.init(userConfigPath, userConfig);
 
-// Merge user config with defaults
-global.userConfig = {
-  updates: { ...config.user_settings.updates, ...userConfig.updates },
-  appearance: { ...config.user_settings.appearance, ...userConfig.appearance },
-  badge: { ...config.user_settings.badge, ...userConfig.badge }
-};
+// Settings from before the settings window: "Close to tray" moved from appearance to general
+if (typeof userConfig.appearance?.closeToTray === 'boolean' && userConfig.general?.closeToTray === undefined) {
+  settings.set('general.closeToTray', userConfig.appearance.closeToTray);
+}
 
-// Function to save user config
 function saveUserConfig() {
+  fs.writeFileSync(userConfigPath, JSON.stringify(userConfig, null, 2), 'utf8');
+}
+
+// Performance tuning (memory/CPU): tiered Chromium/V8 flags + runtime GC/cache monitor.
+// See electron-performance package. Must run before app is ready.
+const perfLogger = { log: (...a) => logger.log(...a), debug: (...a) => logger.debug(...a), error: (...a) => logger.error(...a) };
+const perfSystem = applyCommandLineFlags(app, { logger: perfLogger });
+logger.log(
+  `Performance tuning applied: memTier=${perfSystem.memoryTier}` +
+  (perfSystem.pi.isRaspberryPi ? ` pi=gen${perfSystem.pi.generation}` : '') +
+  ` gpu=${perfSystem.gpu.discrete.length ? 'discrete' : perfSystem.gpu.physical.length ? 'integrated' : 'none'}`
+);
+
+let memoryMonitor;
+let lastGcTime = Date.now();
+const GC_COOLDOWN = (perfSystem.pi.isRaspberryPi && perfSystem.pi.generation <= 3) ? 5000 : 10000;
+app.on('ready', () => {
+  memoryMonitor = startMemoryMonitor({ app, BrowserWindow }, { system: perfSystem, logger: perfLogger });
+});
+
+// Linux sandbox fallback: Chromium needs either a setuid-root chrome-sandbox or working
+// unprivileged user namespaces. On Ubuntu 23.10+ the latter requires an AppArmor profile
+// for this exact binary; the .deb/.rpm postinst installs one, AppImage/zip builds get one
+// offered at runtime (see linuxSandbox / whenReady below). When neither works, fall back to
+// --no-sandbox so Chromium doesn't abort at startup. Don't force --no-sandbox otherwise: it
+// throws away working sandboxing. Must run before app is ready.
+let linuxSandboxStatus = 'ok';
+if (process.platform === 'linux') {
   try {
-    fs.writeFileSync(userConfigPath, JSON.stringify(global.userConfig, null, 2), 'utf8');
-    logger.log('User config saved successfully');
-    return true;
-  } catch (error) {
-    logger.error('Failed to save user config:', error);
+    linuxSandboxStatus = linuxSandbox.getSandboxStatus();
+  } catch (err) {
+    logger.log(`Could not determine sandbox availability: ${err.message}`);
+    linuxSandboxStatus = 'unavailable';
+  }
+  if (linuxSandboxStatus !== 'ok') {
+    logger.log(`Linux sandbox status: ${linuxSandboxStatus}; falling back to --no-sandbox`);
+    app.commandLine.appendSwitch('no-sandbox');
+  }
+}
+
+// Offer to install an AppArmor profile so AppImage/zip builds can run sandboxed.
+// Returns true when the app is relaunching.
+async function maybeInstallAppArmorProfile() {
+  if (linuxSandboxStatus !== 'needs-profile' || !app.isPackaged || userConfig.apparmorPrompt === false) return false;
+
+  const { response, checkboxChecked } = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Install', 'Not now'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Enable sandbox',
+    message: `${global.appInfo.name} is running without Chromium's sandbox.`,
+    detail: 'Your system restricts user namespaces via AppArmor. Installing a small AppArmor profile (requires your password) lets the app run sandboxed. The app will restart afterwards.',
+    checkbox: "Don't ask again",
+  });
+  if (response !== 0) {
+    if (checkboxChecked) {
+      userConfig.apparmorPrompt = false;
+      saveUserConfig();
+    }
     return false;
   }
+
+  const result = linuxSandbox.installProfile(global.paths.temp);
+  if (!result.ok) {
+    if (!result.cancelled) {
+      logger.error(`AppArmor profile install failed: ${result.error}`);
+      dialog.showErrorBox('Enable sandbox', `Could not install AppArmor profile:\n${result.error}`);
+    }
+    return false;
+  }
+
+  logger.log('AppArmor profile installed, relaunching');
+  app.relaunch(linuxSandbox.relaunchOptions());
+  app.exit(0);
+  return true;
 }
 
-// Configure autoUpdater (use the generic provider with custom URL so that we can do staging with CDN)
-let updateCheckInterval = null;
-const UPDATE_CHECK_INTERVAL = global.userConfig.updates.checkInterval;
-
-// Set update channel URL
-const updateChannel = global.userConfig.updates.channel || 'latest';
-const updateURL = `https://github.com/oxmc/bsky-desktop/releases/${updateChannel}/download/`;
-
-// Map platform/arch to match yml file names
-const platformMap = {
-  'win32': 'win',
-  'darwin': 'mac',
-  'linux': 'linux'
-};
-const platform = platformMap[os.platform()] || os.platform();
-const arch = os.arch();
-const channelName = `latest-${platform}-${arch}`;
-
-autoUpdater.setFeedURL({
-  provider: 'generic',
-  url: updateURL,
-  channel: channelName,
-  requestHeaders: {
-    'User-Agent': `bsky-desktop-updater/${packageJson.version} (${os.platform()} ${os.arch()}; Electron ${process.versions.electron})`
-  }
-});
-
-logger.log(`Update channel set to: ${updateChannel} ${channelName}`);
-
-// If in dev mode, enable dev update config
-if (isDev) {
-  logger.log("Enabling dev update config for autoUpdater");
-  autoUpdater.forceDevUpdateConfig = true;
-};
-
-// Set autoUpdater options from user config
-autoUpdater.autoDownload = global.userConfig.updates.autoDownload;
-autoUpdater.autoInstallOnAppQuit = global.userConfig.updates.autoInstallOnQuit;
-autoUpdater.disableWebInstaller = true;
-autoUpdater.disableDifferentialDownload = true;
-
-// Setup updater event handlers
-autoUpdater.on('checking-for-update', () => {
-  logger.log('Checking for updates...');
-  if (global.splash && global.splash.webContents) {
-    global.splash.webContents.send('ui:progtext', {
-      title: 'Checking for updates...',
-      subtitle: 'Awaiting response'
-    });
-  };
-});
-
-autoUpdater.on('update-available', (info) => {
-  logger.log('Update available:', info.version);
-  if (global.splash && global.splash.webContents) {
-    global.splash.webContents.send('ui:progtext', {
-      title: 'Update available',
-      subtitle: `Version ${info.version}`
-    });
-  };
-
-  // Notify user if main window is already shown
-  if (global.PageView && global.PageView.webContents && global.config.runtime.isReady) {
-    global.PageView.webContents.send('ui:notif', {
-      title: 'Update Available',
-      message: `Version ${info.version} is available for download`,
-      options: {
-        izitoast: {
-          position: 'topRight',
-          timeout: 5000,
-          layout: 2,
-          color: 'blue'
-        }
-      }
-    });
-
-    // Show desktop notification if window is not focused
-    if (global.mainWindow && !global.mainWindow.isFocused()) {
-      notifier.notify({
-        title: 'Bluesky Desktop - Update Available',
-        message: `Version ${info.version} is available for download`,
-        icon: path.join(global.paths.app, 'ui', 'img', 'icons', 'icon.png'),
-        sound: false,
-        wait: false
-      });
-    }
-  }
-});
-
-autoUpdater.on('update-not-available', (info) => {
-  logger.log('No updates available');
-  if (global.splash && global.splash.webContents) {
-    global.splash.webContents.send('ui:progtext', {
-      title: 'Checking for updates...',
-      subtitle: 'Up to date!'
-    });
-  };
-});
-
-autoUpdater.on('error', (err) => {
-  logger.error('Update error:', err);
-  if (global.splash && global.splash.webContents) {
-    global.splash.webContents.send('ui:progtext', {
-      title: 'Error checking for updates',
-      subtitle: ' '
-    });
-  };
-});
-
-autoUpdater.on('download-progress', (progressObj) => {
-  logger.log(`Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}%`);
-  if (global.splash && global.splash.webContents) {
-    global.splash.webContents.send('ui:progtext', {
-      title: 'Downloading update',
-      subtitle: `${Math.round(progressObj.percent)}% complete`
-    });
-  };
-
-  // Show progress in main window if available
-  if (global.PageView && global.PageView.webContents && global.config.runtime.isReady) {
-    global.PageView.webContents.send('ui:notif', {
-      title: 'Downloading Update',
-      message: `${Math.round(progressObj.percent)}% complete`,
-      options: {
-        izitoast: {
-          position: 'topRight',
-          timeout: 2000,
-          layout: 2,
-          color: 'blue'
-        }
-      }
-    });
-  }
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-  logger.log('Update downloaded:', info.version);
-  if (global.splash && global.splash.webContents) {
-    global.splash.webContents.send('ui:progtext', {
-      title: 'Update downloaded',
-      subtitle: 'Will install on quit'
-    });
-  };
-
-  if (global.PageView && global.PageView.webContents) {
-    global.PageView.webContents.send('ui:notif', {
-      title: 'Update Ready',
-      message: `Version ${info.version} will be installed when you restart the app`,
-      options: {
-        izitoast: {
-          position: 'topRight',
-          timeout: 10000,
-          layout: 2,
-          color: 'green'
-        }
-      }
-    });
-
-    // Show desktop notification if window is not focused
-    if (global.mainWindow && !global.mainWindow.isFocused()) {
-      notifier.notify({
-        title: 'Bluesky Desktop - Update Ready',
-        message: `Version ${info.version} will be installed when you restart the app`,
-        icon: path.join(global.paths.app, 'ui', 'img', 'icons', 'icon.png'),
-        sound: false,
-        wait: false
-      });
-    }
-  }
-});
-
-// Check for updates
-async function checkForUpdates(silent = false) {
-  try {
-    if (!silent) {
-      logger.log('Running periodic update check...');
-    }
-
-    const updateCheckResult = await autoUpdater.checkForUpdates();
-
-    if (updateCheckResult && updateCheckResult.updateInfo) {
-      const currentVersion = packageJson.version;
-      const latestVersion = updateCheckResult.updateInfo.version;
-
-      // Only download if a newer version is available
-      if (latestVersion !== currentVersion) {
-        logger.log(`Update available: ${latestVersion} (current: ${currentVersion})`);
-
-        // Automatically download the update in the background
-        await autoUpdater.downloadUpdate();
-      } else {
-        if (!silent) {
-          logger.log('Already running the latest version');
-        }
-      }
-    }
-  } catch (error) {
-    logger.error('Error during periodic update check:', error);
-  }
+// Splash progress text. The splash is destroyed once the main window shows, which can
+// happen while startup is still running, so a send to it must not throw.
+function splashProgress(progress) {
+  if (global.splash && !global.splash.isDestroyed()) global.splash.webContents.send('ui:progtext', progress);
 }
 
-function startPeriodicUpdateChecks() {
-  // Clear any existing interval
-  if (updateCheckInterval) {
-    clearInterval(updateCheckInterval);
-  }
-
-  // Set up periodic checks
-  updateCheckInterval = setInterval(() => {
-    checkForUpdates(false);
-  }, UPDATE_CHECK_INTERVAL);
-
-  logger.log(`Periodic update checks started (interval: ${UPDATE_CHECK_INTERVAL / 60000} minutes)`);
+// Desktop appearance (Linux: follow the GTK theme, see utils/appearance.js)
+let appAppearance = null;
+function loadAppearance() {
+  appAppearance = appearance.getAppearance({ useGtkTheme: settings.get('appearance.useGtkTheme') });
+  nativeTheme.themeSource = appearance.getThemeSource(appAppearance);
+  if (appAppearance.gtk) logger.log(`Following GTK theme ${appAppearance.gtk.name}`);
 }
-
-// Get system information for performance tuning
-const totalMem = os.totalmem() / (1024 * 1024); // in MB
-const allGpus = GPUInfo.getAllGpuInfo();
-const piInfo = detectRpi.info();
-
-// Filter out software and virtual GPUs
-const physicalGpus = allGpus.filter(gpu => {
-  const name = gpu.name.toLowerCase();
-  return !name.includes('software') && !name.includes('virtual') && !name.includes('swiftshader');
-});
-
-// Filter integrated GPUs (mostly Intel)
-const discreteGpus = physicalGpus.filter(gpu => {
-  const name = gpu.name.toLowerCase();
-  return !name.includes('intel') && !name.includes('amd radeon') && !name.includes('radeon') && !name.includes('uhd graphics') && !name.includes('hd graphics');
-});
-
-// If running on Raspberry Pi, determine generation for specific tweaks
-const isRaspberryPi = piInfo.isPi;
-let piGeneration = 0;
-
-if (isRaspberryPi) {
-  logger.log(`Detected Raspberry Pi: ${piInfo.model || 'Unknown model'}`);
-  logger.log(`Hardware: ${piInfo.hardware}, Revision: ${piInfo.revision}`);
-
-  // Determine generation from model string
-  const model = (piInfo.model || '').toLowerCase();
-
-  if (model.includes('pi 5') || model.includes('compute module 5')) {
-    piGeneration = 5;
-  } else if (model.includes('pi 4') || model.includes('compute module 4')) {
-    piGeneration = 4;
-  } else if (model.includes('pi 3') || model.includes('compute module 3')) {
-    piGeneration = 3;
-  } else if (model.includes('zero 2')) {
-    piGeneration = 3; // Zero 2 W uses RP3A0, similar to Pi 3
-  } else if (model.includes('pi 2') || model.includes('compute module')) {
-    piGeneration = 2;
-  } else if (model.includes('zero') || model.includes('pi 1')) {
-    piGeneration = 1;
-  } else {
-    // Fallback: determine by hardware ID
-    const hw = (piInfo.hardware || '').toUpperCase();
-    if (hw.includes('BCM2712')) {
-      piGeneration = 5;
-    } else if (hw.includes('BCM2711')) {
-      piGeneration = 4;
-    } else if (hw.includes('BCM2837') || hw === 'RP3A0') {
-      piGeneration = 3;
-    } else if (hw.includes('BCM2836')) {
-      piGeneration = 2;
-    } else {
-      piGeneration = 1; // BCM2835 and older
-    }
-  }
-
-  logger.log(`Determined Pi Generation: ${piGeneration}`);
-}
-
-// Determine memory tier for appropriate limits
-const memoryTier = totalMem < 4096 ? 'low' : totalMem < 8192 ? 'medium' : 'high';
-
-// Define constants based on Pi detection
-const MEMORY_CHECK_INTERVAL = isRaspberryPi && piGeneration <= 3 ? 3000 : 5000;
-const CACHE_CLEAR_INTERVAL = isRaspberryPi && piGeneration <= 3 ? 300000 : 600000; // 5 min vs 10 min
-const HIGH_MEMORY_THRESHOLD = isRaspberryPi && piGeneration <= 3 ? 75 : 85;
-const GC_COOLDOWN = isRaspberryPi && piGeneration <= 3 ? 5000 : 10000; // Faster GC on old Pi
-
-// Apply Raspberry Pi specific optimizations FIRST (highest priority)
-if (isRaspberryPi) {
-  logger.log('Applying Raspberry Pi optimizations');
-
-  // All Pi models benefit from these
-  app.commandLine.appendSwitch('disable-gpu-compositing');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
-  app.commandLine.appendSwitch('disable-dev-shm-usage');
-  app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
-  app.commandLine.appendSwitch('disable-smooth-scrolling');
-  app.commandLine.appendSwitch('disable-webgl');
-  app.commandLine.appendSwitch('disable-webgl2');
-  app.commandLine.appendSwitch('disable-reading-from-canvas'); // Prevent canvas readback
-
-  // Generation-specific optimizations
-  if (piGeneration <= 3) {
-    // Pi 1, 2, 3, Zero, Zero 2 W - very aggressive optimization
-    logger.log(`Applying aggressive optimizations for Pi Gen ${piGeneration}`);
-
-    app.commandLine.appendSwitch('disable-gpu');
-    app.commandLine.appendSwitch('disable-animations');
-    app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor,Compositing');
-    app.commandLine.appendSwitch('num-raster-threads', piGeneration <= 1 ? '1' : '2');
-    app.commandLine.appendSwitch('enable-low-end-device-mode');
-
-    // Determine memory tier for older Pi models
-    const piMemoryTier = totalMem < 512 ? 'verylow' : totalMem < 1024 ? 'low' : 'medium';
-    logger.log(`Pi memory tier: ${piMemoryTier} (${Math.round(totalMem)}MB total)`);
-
-    // Reduce JS heap size significantly for Pi
-    const piJsHeapSize = piMemoryTier === 'verylow' ? 256 : piMemoryTier === 'low' ? 512 : 1024;
-    logger.log(`Setting Pi JS heap size to: ${piJsHeapSize}MB`);
-
-    // Override the existing JS flags with Pi-optimized settings
-    app.commandLine.appendSwitch('js-flags',
-      `--expose-gc --max-old-space-size=${piJsHeapSize} --gc-global --always-compact --optimize-for-size --max-semi-space-size=1 --initial-heap-size=${Math.floor(piJsHeapSize / 4)}`
-    );
-
-    // Additional memory-saving flags
-    app.commandLine.appendSwitch('renderer-process-limit', '1');
-    app.commandLine.appendSwitch('disable-hang-monitor');
-
-  } else if (piGeneration === 4) {
-    // Pi 4 - moderate optimization, enable hardware acceleration where possible
-    logger.log('Applying moderate optimizations for Pi 4');
-
-    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-    app.commandLine.appendSwitch('use-gl', 'egl');
-    app.commandLine.appendSwitch('num-raster-threads', '2');
-    app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
-
-    // Pi 4 can handle a bit more
-    const pi4JsHeapSize = totalMem < 2048 ? 1024 : totalMem < 4096 ? 1536 : 2048;
-    logger.log(`Setting Pi 4 JS heap size to: ${pi4JsHeapSize}MB`);
-    app.commandLine.appendSwitch('js-flags',
-      `--expose-gc --max-old-space-size=${pi4JsHeapSize} --gc-global --always-compact --optimize-for-size`
-    );
-
-  } else if (piGeneration >= 5) {
-    // Pi 5 - lighter optimization, more capable hardware
-    logger.log('Applying light optimizations for Pi 5');
-
-    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder');
-    app.commandLine.appendSwitch('use-gl', 'egl');
-    app.commandLine.appendSwitch('enable-gpu-rasterization');
-    app.commandLine.appendSwitch('num-raster-threads', '4');
-    app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
-    app.commandLine.appendSwitch('enable-zero-copy');
-
-    // Pi 5 can handle normal workloads
-    const pi5JsHeapSize = totalMem < 4096 ? 2048 : 3072;
-    logger.log(`Setting Pi 5 JS heap size to: ${pi5JsHeapSize}MB`);
-    app.commandLine.appendSwitch('js-flags',
-      `--expose-gc --max-old-space-size=${pi5JsHeapSize} --gc-global --optimize-for-size`
-    );
-  }
-
-  // All Pi models: reduce cache size
-  const piCacheSize = piGeneration <= 3 ? 26214400 : 52428800; // 25MB vs 50MB
-  app.commandLine.appendSwitch('disk-cache-size', piCacheSize.toString());
-  logger.log(`Set disk cache to ${piCacheSize / 1024 / 1024}MB for Pi`);
-
-  // Disable unnecessary features for all Pi models
-  app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess,CalculateNativeWinOcclusion');
-} else {
-  // NON-PI SYSTEMS: Apply standard optimizations
-
-  // If low memory (non-Pi), apply additional restrictions
-  if (memoryTier === 'low') {
-    logger.log('Low memory system detected, applying additional restrictions');
-    app.commandLine.appendSwitch('disable-smooth-scrolling');
-    app.commandLine.appendSwitch('disable-accelerated-2d-canvas');
-    app.commandLine.appendSwitch('num-raster-threads', '2');
-  }
-
-  // GPU-based performance adjustments (non-Pi)
-  if (discreteGpus.length > 0) {
-    // A dedicated GPU is present, enable all GPU features
-    logger.log('Discrete GPU detected, enabling full GPU features');
-  } else if (physicalGpus.length > 0) {
-    // Only integrated GPUs present, enable some GPU features
-    logger.log('Only integrated GPU detected, enabling limited GPU features');
-    app.commandLine.appendSwitch('enable-features', 'UseSkiaRenderer');
-  } else {
-    // No physical GPUs detected, disable GPU features
-    logger.log('No physical GPU detected, disabling GPU features');
-    app.commandLine.appendSwitch('disable-gpu');
-    app.commandLine.appendSwitch('disable-gpu-compositing');
-    app.commandLine.appendSwitch('disable-software-rasterizer');
-  }
-
-  // Optimize transparency based on platform and GPU availability (non-Pi)
-  if (process.platform !== 'win32' && process.platform !== 'darwin') {
-    logger.log('Disabling Transparent Visuals');
-    app.commandLine.appendSwitch('disable-transparent-visuals');
-  } else if (discreteGpus.length > 0 || physicalGpus.length > 0) {
-    // GPU-boosting flags only when GPU is available
-    app.commandLine.appendSwitch('enable-features', 'UseSkiaRenderer');
-    app.commandLine.appendSwitch('enable-zero-copy');
-    app.commandLine.appendSwitch('ignore-gpu-blacklist');
-    app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
-    app.commandLine.appendSwitch('enable-gpu-rasterization');
-  }
-
-  // Platform-specific optimizations (non-Pi)
-  if (process.platform === 'win32') {
-    logger.log('Applying Windows-specific optimizations');
-    app.commandLine.appendSwitch('disable-direct-composition');
-    app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar');
-  }
-
-  if (process.platform === 'darwin') {
-    logger.log('Applying macOS-specific optimizations');
-    app.commandLine.appendSwitch('enable-metal'); // Metal API for GPU
-  }
-
-  if (process.platform === 'linux') {
-    logger.log('Applying Linux-specific optimizations');
-    app.commandLine.appendSwitch('disable-gpu-memory-buffer-video-frames');
-    app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-  }
-
-  // Memory-based JS heap limits (non-Pi)
-  const jsHeapSize = memoryTier === 'low' ? 1024 : memoryTier === 'medium' ? 2048 : 4096;
-  logger.log(`Setting JS heap size to: ${jsHeapSize}MB`);
-
-  // V8 optimization flags (non-Pi)
-  app.commandLine.appendSwitch('js-flags', `--expose-gc --max-old-space-size=${jsHeapSize} --gc-global --always-compact --optimize-for-size`);
-
-  // Disk cache control (non-Pi)
-  app.commandLine.appendSwitch('disk-cache-size', '52428800'); // 50MB cache limit
-}
-
-// GENERAL FLAGS (apply to all systems - Pi and non-Pi)
-logger.log('Applying general performance flags');
-
-// General performance flags (Disable unneeded features)
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion,Translate,AutofillServerCommunication,Autofill,BackgroundSync,MediaRouter,HardwareMediaKeyHandling');
-app.commandLine.appendSwitch('disable-shared-dictionary');
-app.commandLine.appendSwitch('disable-spell-checking');
-app.commandLine.appendSwitch('disable-spellchecking-dictionaries');
-app.commandLine.appendSwitch('disable-http-cache');
-app.commandLine.appendSwitch('disable-speech-api');
-app.commandLine.appendSwitch('disable-notifications');
-app.commandLine.appendSwitch('disable-sync');
-app.commandLine.appendSwitch('disable-domain-reliability');
-
-// Process management
-app.commandLine.appendSwitch('process-per-site');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-app.commandLine.appendSwitch('disable-background-timer-throttling');
-
-// Network optimizations
-app.commandLine.appendSwitch('disable-site-isolation-trials');
-app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process');
-
-// Additional memory pressure handling
-let lastGcTime = Date.now();
-const gcInterval = isRaspberryPi && piGeneration <= 3 ? 10000 :
-  isRaspberryPi && piGeneration === 4 ? 20000 :
-    memoryTier === 'low' ? 15000 : 30000;
-
-if (global.gc) {
-  logger.log(`Manual GC enabled (interval: ${gcInterval}ms)`);
-  setInterval(() => {
-    if (global.gc) {
-      const memUsage = process.memoryUsage();
-      const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-      const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
-
-      logger.log(`Memory before GC: ${heapUsedMB}MB / ${heapTotalMB}MB`);
-      global.gc();
-
-      const memUsageAfter = process.memoryUsage();
-      const heapUsedAfterMB = Math.round(memUsageAfter.heapUsed / 1024 / 1024);
-      logger.log(`Memory after GC: ${heapUsedAfterMB}MB (freed: ${heapUsedMB - heapUsedAfterMB}MB)`);
-
-      lastGcTime = Date.now();
-    }
-  }, gcInterval);
-}
-
-// Monitor memory pressure and trigger GC when needed
-app.on('ready', () => {
-  // Memory pressure monitoring
-  setInterval(() => {
-    const memUsage = process.memoryUsage();
-    const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
-    const rss = Math.round(memUsage.rss / 1024 / 1024);
-
-    // Log memory stats periodically (only when high)
-    if (heapUsedPercent > 70) {
-      logger.debug(`Memory usage: ${Math.round(heapUsedPercent)}% heap, ${rss}MB RSS`);
-    }
-
-    // Trigger GC if heap is >85% full and last GC was >10s ago
-    if (heapUsedPercent > HIGH_MEMORY_THRESHOLD && Date.now() - lastGcTime > GC_COOLDOWN && global.gc) {
-      logger.log(`High memory pressure detected (${Math.round(heapUsedPercent)}%), forcing GC`);
-      global.gc();
-      lastGcTime = Date.now();
-    }
-  }, MEMORY_CHECK_INTERVAL);
-
-  // Clear caches periodically
-  setInterval(() => {
-    const windows = BrowserWindow.getAllWindows();
-    windows.forEach(win => {
-      if (win && !win.isDestroyed()) {
-        win.webContents.session.clearCache().then(() => {
-          logger.debug('Cleared browser cache');
-        }).catch(err => {
-          logger.error('Failed to clear cache:', err);
-        });
-      }
-    });
-  }, CACHE_CLEAR_INTERVAL);
-});
+loadAppearance();
 
 // setup the titlebar main process:
 setupTitlebar();
+
+// Initialize the about window
+initAboutWindow({
+  //open_devtools: isDev,
+  icon_path: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
+  package_json_dir: global.paths.app_root,
+  product_name: global.appInfo.name,
+  license: global.appInfo.license,
+  css_path: path.join('styles', 'ui-dark.css'),
+  use_version_info: [
+    ['Application Version', `${global.appInfo.version}`],
+    ['Contributors', contributors.map((contributor) => contributor.name).join(', ')],
+  ],
+});
 
 // Disable reload and F5 if not in dev mode: (This code is kept for future use, currently disabled as there is no use for this currently)
 if (process.env.NODE_ENV !== 'development') {
@@ -730,12 +311,13 @@ function createWindow() {
     height: 400,
     frame: false,
     show: false,
+    roundedCorners: true,
     icon: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
     skipTaskbar: true,
-    webPreferences: {
+    webPreferences: getRecommendedWebPreferences({
       nodeIntegration: true,
       contextIsolation: false
-    }
+    })
   }));
   splash.loadFile(path.join(global.paths.app, 'ui', 'splash.html'));
   logger.log("Creating Main Window");
@@ -748,58 +330,88 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     show: false,
+    roundedCorners: true,
     titleBarStyle: 'hidden',
-    titleBarOverlay: process.platform === 'darwin' ? false : true,
+    // Native overlay controls don't render on the transparent Linux window; the titlebar
+    // draws its own there. macOS uses the traffic lights.
+    titleBarOverlay: process.platform === 'win32',
+    // Transparent on Linux so the views' rounded corners show the desktop behind them
+    ...(process.platform === 'linux' ? { transparent: true, backgroundColor: '#00000000' } : {}),
     icon: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
-    webPreferences: {
+    webPreferences: getRecommendedWebPreferences({
       nodeIntegration: false,
       contextIsolation: true
-    }
+    })
   }));
   mainWindowState.manage(mainWindow);
   mainWindow.hide();
+  attachWindowMemoryOptimizations(mainWindow, {
+    onSettleHidden: () => memoryMonitor?.forceGc(),
+    logger: perfLogger
+  });
   logger.log("Creating Title Bar View");
   const titlebarWindow = (global.titlebarWindow = new WebContentsView({
-    webPreferences: {
+    webPreferences: getRecommendedWebPreferences({
       nodeIntegration: true,
       contextIsolation: false,
       preload: path.join(global.paths.app, 'ui', 'preload-titlebar.js')
-    }
+    })
   }));
   titlebarWindow.webContents.loadFile(path.join(global.paths.app, 'ui', 'titlebar.html'));
   const PageView = (global.PageView = new WebContentsView({
-    webPreferences: {
+    webPreferences: getRecommendedWebPreferences({
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(global.paths.app, 'ui', 'preload.js'),
       session: global.ses
-    },
+    }),
   }));
-  PageView.webContents.loadURL(global.urls.main);
+  // Userstyles: applied on every page load, managed from the settings window
+  initUserstyles({ dir: global.paths.userstyles, site: new URL(global.urls.main).hostname, webContents: PageView.webContents });
+  // Nothing is loaded here: startup loads the main page (or the offline page) behind the
+  // splash and reveals the window when it has loaded.
   mainWindow.contentView.addChildView(titlebarWindow);
   mainWindow.contentView.addChildView(PageView);
   mainWindow.setMenu(null);
 
+  // Rounded corners like GTK/libadwaita on Linux (Windows 11 and macOS round natively):
+  // rounded when floating, square when maximized or fullscreen. setBorderRadius only takes
+  // one radius for all four corners, so the titlebar view is made taller and PageView,
+  // stacked above it, covers its rounded bottom. PageView's own rounded top corners then
+  // show that hidden strip, which syncSeamColors paints the page's background so the seam
+  // between them looks square.
+  const windowCornerRadius = 12;
+  function currentCornerRadius() {
+    if (process.platform !== 'linux') return 0;
+    return mainWindow.isMaximized() || mainWindow.isFullScreen() ? 0 : windowCornerRadius;
+  }
+
+  const titleBarHeight = 30;
   function updateViewBounds() {
     const contentBounds = mainWindow.contentView.getBounds();
     const contentWidth = Math.round(contentBounds.width);
     const contentHeight = Math.round(contentBounds.height);
 
-    // On macOS, offset the title bar slightly to account for the traffic lights
-    const titleBarHeight = 30;
-    const titleBarOffset = process.platform === 'darwin' ? titleBarHeight - 2 : 0;
-    const pageViewHeight = Math.max(0, contentHeight - titleBarHeight);
+    // On macOS, offset the page view slightly to account for the traffic lights
+    const titleBarOffset = process.platform === 'darwin' ? titleBarHeight - 2 : titleBarHeight;
+    const pageViewHeight = Math.max(0, contentHeight - titleBarOffset);
+    const radius = currentCornerRadius();
+
+    titlebarWindow.setBorderRadius(radius);
+    PageView.setBorderRadius(radius);
 
     titlebarWindow.setBounds({
       x: 0,
-      y: titleBarOffset,
+      y: 0,
       width: contentWidth,
-      height: titleBarHeight,
+      // 2x radius: the strip behind PageView's rounded top corners must itself sit above
+      // this view's own rounded bottom corners, or both cut-outs overlap and show through
+      height: titleBarHeight + radius * 2,
     });
 
     PageView.setBounds({
       x: 0,
-      y: titleBarHeight + titleBarOffset,
+      y: titleBarOffset,
       width: contentWidth,
       height: pageViewHeight,
     });
@@ -808,19 +420,95 @@ function createWindow() {
   // Basic resize
   mainWindow.on("resize", updateViewBounds);
 
-  // On maximize/unmaximize, delay slightly to ensure full layout
+  // On maximize/unmaximize and fullscreen, delay slightly to ensure full layout
   mainWindow.on("maximize", () => setTimeout(updateViewBounds, 50));
   mainWindow.on("unmaximize", () => setTimeout(updateViewBounds, 50));
+  mainWindow.on("enter-full-screen", () => setTimeout(updateViewBounds, 50));
+  mainWindow.on("leave-full-screen", () => setTimeout(updateViewBounds, 50));
+
+  // Sample the page background at its top-left/top-right corners for the titlebar strip
+  // behind PageView's rounded top corners (see updateViewBounds).
+  function syncSeamColors() {
+    if (process.platform !== 'linux') return;
+    PageView.webContents.executeJavaScript(`(() => {
+      // Composite the (often translucent) backgrounds stacked at a point into one opaque color
+      const bgAt = (x, y) => {
+        const layers = [];
+        for (let el = document.elementFromPoint(x, y); el; el = el.parentElement) {
+          const m = getComputedStyle(el).backgroundColor.match(/[\\d.]+/g);
+          if (!m) continue;
+          const [r, g, b, a = 1] = m.map(Number);
+          if (a > 0) layers.push([r, g, b, a]);
+          if (a >= 1) break;
+        }
+        let out = matchMedia('(prefers-color-scheme: dark)').matches ? [0, 0, 0] : [255, 255, 255];
+        for (const [r, g, b, a] of layers.reverse()) {
+          out = [r * a + out[0] * (1 - a), g * a + out[1] * (1 - a), b * a + out[2] * (1 - a)];
+        }
+        return 'rgb(' + out.map(Math.round).join(', ') + ')';
+      };
+      return [bgAt(1, 1), bgAt(innerWidth - 2, 1)];
+    })()`).then(([left, right]) => {
+      titlebarWindow.webContents.send('titlebar:setSeamColors', left, right);
+    }).catch((err) => logger.debug(`Could not sample page colors: ${err.message}`));
+  }
+  PageView.webContents.on('did-finish-load', syncSeamColors);
+  PageView.webContents.on('did-navigate-in-page', syncSeamColors);
+  nativeTheme.on('updated', () => setTimeout(syncSeamColors, 500));
+
+  // Titlebar color: the GTK theme's headerbar color when following it (Linux), otherwise
+  // the color the page asks for (titlebar:setColor) or the titlebar's default
+  function syncTitlebarColor() {
+    const color = appearance.getTitlebarColor(appAppearance);
+    if (color) titlebarWindow.webContents.send('titlebar:setColor', color);
+  }
+  titlebarWindow.webContents.on('did-finish-load', syncTitlebarColor);
+
+  // Appearance setting changed, or the desktop theme changed while running
+  function refreshAppearance() {
+    const before = JSON.stringify(appAppearance);
+    loadAppearance();
+    if (JSON.stringify(appAppearance) === before) return;
+    syncTitlebarColor();
+    setTimeout(syncSeamColors, 500);
+  }
+  settings.onChange('appearance.useGtkTheme', refreshAppearance);
+  if (process.platform === 'linux') {
+    const monitor = spawn('gsettings', ['monitor', 'org.gnome.desktop.interface'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let pending = null;
+    monitor.on('error', () => { }); // no gsettings: nothing to follow
+    monitor.stdout.on('data', (data) => {
+      if (!/gtk-theme|color-scheme|accent-color/.test(data.toString())) return;
+      clearTimeout(pending);
+      pending = setTimeout(refreshAppearance, 300);
+    });
+    app.on('will-quit', () => monitor.kill());
+  }
+
+  // Ctrl/Cmd+, opens settings, like macOS apps
+  const openSettingsShortcut = (event, input) => {
+    if (input.type === 'keyDown' && input.key === ',' && (process.platform === 'darwin' ? input.meta : input.control)) {
+      event.preventDefault();
+      openSettingsWindow(mainWindow);
+    }
+  };
+  PageView.webContents.on('before-input-event', openSettingsShortcut);
+  titlebarWindow.webContents.on('before-input-event', openSettingsShortcut);
 
   // Save window state on close
   mainWindow.on("close", (event) => {
     mainWindowState.saveState(mainWindow);
 
-    if (global.userConfig?.appearance?.closeToTray === true && !global.config.runtime.isQuitting) {
+    if (settings.get('general.closeToTray') && !global.config.runtime.isQuitting) {
       event.preventDefault();
       mainWindow.hide();
       logger.log('Window hidden to tray');
     }
+  });
+  // Really closed: quit, even if hidden helper windows (about, popups) are still around and
+  // would keep the app running with a tray pointing at a destroyed window
+  mainWindow.on("closed", () => {
+    if (process.platform !== 'darwin') app.quit();
   });
 
   // Set initial bounds
@@ -828,13 +516,14 @@ function createWindow() {
 
   // Badge count: (use mainWindow as that shows the badge on the taskbar)
   // Pass PageView's webContents for drawing since mainWindow has no loaded content
+  const useSystemAccent = settings.get('badge.useSystemAccent');
   const badgeOptions = {
     ...global.app_settings.badgeOptions,
     drawingWebContents: PageView.webContents,
-    useSystemAccentTheme: global.userConfig.badge.useSystemAccent
+    useSystemAccentTheme: useSystemAccent
   };
-  const badgeInstance = new badge(mainWindow, badgeOptions);
-  logger.log(`Badge configured - useSystemAccent: ${global.userConfig.badge.useSystemAccent}`);
+  new badge(mainWindow, badgeOptions);
+  logger.log(`Badge configured - useSystemAccent: ${useSystemAccent}`);
 
   logger.log("Main Window Created, Showing splashscreen");
   splash.show();
@@ -853,52 +542,95 @@ function createWindow() {
   //electronremote.enable(titlebarWindow.webContents);
   electronremote.enable(PageView.webContents);
 
+  // Hands over from the splash to the main window. Called once by startup when the first
+  // page is ready; later loads must not pull the main window in front of e.g. the settings
+  // window.
+  global.revealMainWindow = () => {
+    if (global.isUpdating || splash.isDestroyed()) return;
+    logger.log('Showing main window');
+    global.config.runtime.isReady = true;
+    mainWindow.show();
+    splash.destroy();
+    mainWindow.focus();
+    setImmediate(updateViewBounds);
+  };
+
   // PageView Events:
   PageView.webContents.setWindowOpenHandler(({ url }) => {
-    new BrowserWindow({ show: true, autoHideMenuBar: true, icon: path.join(global.paths.app, 'ui', 'img', 'logo.png') }).loadURL(url);
+    const popup = new BrowserWindow({
+      show: true,
+      autoHideMenuBar: true,
+      icon: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
+      webPreferences: getRecommendedWebPreferences()
+    });
+    attachWindowMemoryOptimizations(popup, { onSettleHidden: () => memoryMonitor?.forceGc(), logger: perfLogger });
+    popup.loadURL(url);
     return { action: 'deny' };
+  });
+
+  PageView.webContents.on('page-title-updated', (event, title) => {
+    global.titlebarWindow.webContents.send('titlebar:setTitle', title);
   });
 };
 
-function showAboutWindow() {
-  AboutWindow({
-    //open_devtools: isDev,
-    icon_path: path.join(global.paths.app, 'ui', 'img', 'logo.png'),
-    package_json_dir: global.paths.app_root,
-    product_name: global.appInfo.name,
-    license: global.appInfo.license,
-    css_path: path.join('styles', 'ui-dark.css'),
-    use_version_info: [
-      ['Application Version', `${global.appInfo.version}`],
-      ['Contributors', contributors.map((contributor) => contributor.name).join(', ')],
-    ],
+// Loads a page into PageView behind the splash; resolves once it has loaded (or failed to)
+function loadFirstPage(load) {
+  const { webContents } = global.PageView;
+  return new Promise((resolve) => {
+    const done = () => {
+      webContents.off('did-finish-load', done);
+      webContents.off('did-fail-load', failed);
+      resolve();
+    };
+    const failed = (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (isMainFrame) done();
+    };
+    webContents.on('did-finish-load', done);
+    webContents.on('did-fail-load', failed);
+    load(webContents).catch((error) => logger.error(`Failed to load first page: ${error}`));
   });
+}
+
+function showAboutWindow() {
+  openAboutWindow();
 };
+
+// The main window, unless it has been destroyed (macOS keeps the app running without it)
+function mainWindowAlive() {
+  return global.mainWindow && !global.mainWindow.isDestroyed() ? global.mainWindow : null;
+}
 
 function createTray() {
   logger.log("Creating Tray");
   const logoImage = nativeImage.createFromPath(path.join(global.paths.app, 'ui', 'img', 'logo.png')).resize({ width: 16, height: 16 });
-  const tray = new Tray(logoImage);
+  const tray = (global.tray = new Tray(logoImage));
   tray.setToolTip(global.appInfo.name);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: global.appInfo.name, enabled: false, icon: logoImage },
+    { type: 'separator' },
+    process.platform === 'darwin'
+      ? { label: 'Show', click() { mainWindowAlive()?.show(); } }
+      : { label: 'Show/Hide', click() { const win = mainWindowAlive(); if (win) win.isVisible() ? win.hide() : win.show(); } },
     { type: 'separator' },
     {
       label: 'About', click() {
         showAboutWindow();
       }
     },
+    { label: 'Settings…', click() { openSettingsWindow(mainWindowAlive()); } },
     { label: 'Quit', role: 'quit', click() { app.quit(); } }
   ]));
   tray.on('click', () => {
-    if (global.mainWindow.isVisible() && !global.mainWindow.isFocused()) {
-      global.mainWindow.focus();
+    const win = mainWindowAlive();
+    if (!win) return;
+    if (win.isVisible() && !win.isFocused()) {
+      win.focus();
     } else {
-      global.mainWindow.show();
-      if (global.mainWindow.isMinimized()) {
-        global.mainWindow.restore();
+      win.show();
+      if (win.isMinimized()) {
+        win.restore();
       }
-      global.mainWindow.focus();
+      win.focus();
     }
   });
 };
@@ -965,12 +697,32 @@ function handleDeeplink(commandLine) {
   };
 };
 
-// Register app protocol to handle app:// requests
+// MIME types for app:// responses. Chromium's Opaque Response Blocking silently drops
+// cross-scheme <script> loads unless the response carries a script MIME type, so
+// application/octet-stream is only the fallback.
+const APP_PROTOCOL_MIME_TYPES = {
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.json': 'application/json',
+  '.html': 'text/html',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+};
+
+// Register app protocol to handle app://ui/... requests (files in src/ui). Each session has
+// its own protocol registry, so this runs for the default session (splash, titlebar, about)
+// and for PageView's persistent session.
 function handleAppProtocol(session) {
   session.protocol.handle('app', async (req) => {
     const { host, pathname } = new URL(req.url);
-
-    //console.log(`App Protocol Request: host=${host}, pathname=${pathname}`);
 
     if (host === 'ui') {
       const baseDir = path.join(__dirname, '..', 'ui');
@@ -985,17 +737,20 @@ function handleAppProtocol(session) {
 
       try {
         const data = fs.readFileSync(pathToServe);
-        const mimeType = pathname.endsWith('.css') ? 'text/css' : 'application/octet-stream';
+        const mimeType = APP_PROTOCOL_MIME_TYPES[path.extname(pathname).toLowerCase()] || 'application/octet-stream';
         return new Response(data, {
           status: 200,
-          headers: { 'Content-Type': mimeType, 'Access-Control-Allow-Origin': '*' }
+          headers: {
+            'Content-Type': mimeType,
+            'Access-Control-Allow-Origin': '*',
+            // Read from disk every time, so changed injected CSS/JS is never served stale
+            'Cache-Control': 'no-store',
+          }
         });
       } catch (error) {
-        //console.error(`Error serving app protocol for ${req.url}:`, error);
         return new Response('File not found', { status: 404 });
       }
     } else {
-      //console.warn(`Unhandled app protocol host: ${host}`);
       return new Response('Not found', { status: 404 });
     }
   });
@@ -1008,7 +763,10 @@ const secureAppProtocol = [
       standard: true,
       secure: true,
       supportFetchAPI: true,
-      bypassCSP: true
+      bypassCSP: true,
+      // @font-face always fetches in CORS mode, which Chromium only allows for custom
+      // schemes that opt in here
+      corsEnabled: true
     }
   }
 ];
@@ -1044,6 +802,7 @@ app.whenReady().then(async () => {
   logger.log("App Ready, Ensuring singleInstanceLock and registering deeplink");
   const gotTheLock = app.requestSingleInstanceLock();
   if (gotTheLock) {
+    if (await maybeInstallAppArmorProfile()) return;
     logger.log("SingleInstanceLock Acquired, Registering deeplink");
     if (process.defaultApp) {
       if (process.argv.length >= 2) {
@@ -1099,12 +858,24 @@ app.whenReady().then(async () => {
     handleAppProtocol(session.defaultSession);
 
     // Set UserAgent
-    ses.setUserAgent(`Mozilla/5.0 bsky-desktop/${global.appInfo.version} (Electron:${process.versions.electron};) Chrome:${process.versions.chrome};`);
+    global.ses.setUserAgent(`Mozilla/5.0 bsky-desktop/${global.appInfo.version} (Electron:${process.versions.electron};) Chrome:${process.versions.chrome};`);
+
+    // Titlebar IPC bridge
+    ipcMain.on('titlebar:setTitle', (event, title) => {
+      if (global.titlebarWindow) global.titlebarWindow.webContents.send('titlebar:setTitle', title);
+    });
+    ipcMain.on('titlebar:setColor', (event, color) => {
+      if (global.titlebarWindow) global.titlebarWindow.webContents.send('titlebar:setColor', color);
+    });
 
     // Handle ipc for render
-    ipcMain.on('app:check-updates', async (event) => {
+    ipcMain.on('app:check-updates', () => {
       logger.log('Manual update check requested');
-      await checkForUpdates(false);
+      autoUpdater.checkForUpdates().catch((err) => logger.warn('Manual update check failed:', err.message));
+    });
+
+    ipcMain.on('app:quit-and-install', () => {
+      autoUpdater.quitAndInstall();
     });
 
     ipcMain.on('app:restart', (event, arg) => {
@@ -1119,7 +890,7 @@ app.whenReady().then(async () => {
     // Desktop notification IPC handler
     ipcMain.on('app:notification', (event, options) => {
       notifier.notify({
-        title: options.title || 'Bluesky Desktop',
+        title: options.title || global.appInfo.name,
         message: options.message || '',
         icon: options.icon || path.join(global.paths.app, 'ui', 'img', 'icons', 'icon.png'),
         sound: options.sound !== undefined ? options.sound : false,
@@ -1128,56 +899,25 @@ app.whenReady().then(async () => {
       });
     });
 
-    // Settings IPC handlers
-    ipcMain.handle('app:getSettings', () => {
-      return global.userConfig;
+    // Settings window (src/ui/settings.html), opened from the tray, Ctrl/Cmd+, or the page
+    // (settings:open)
+    ipcMain.on('settings:open', (event) => {
+      if (event.sender === global.PageView?.webContents) openSettingsWindow(mainWindowAlive());
     });
-
-    ipcMain.handle('app:saveSettings', (event, newSettings) => {
-      try {
-        const oldSettings = JSON.parse(JSON.stringify(global.userConfig));
-        
-        global.userConfig = {
-          updates: { ...global.userConfig.updates, ...(newSettings.updates || {}) },
-          appearance: { ...global.userConfig.appearance, ...(newSettings.appearance || {}) },
-          badge: { ...global.userConfig.badge, ...(newSettings.badge || {}) }
-        };
-        
-        const saved = saveUserConfig();
-        if (saved) {
-          logger.log('Settings saved via IPC');
-          //logger.log('Old settings:', oldSettings);
-          //logger.log('New settings:', global.userConfig);
-          
-          // Apply settings that don't require restart
-          let requiresRestart = false;
-          
-          // Check if update settings changed (requires restart for update channel)
-          if (oldSettings.updates.channel !== global.userConfig.updates.channel) {
-            requiresRestart = true;
-            logger.log('Update channel changed, restart required');
-          }
-          
-          // Apply update check interval change
-          if (oldSettings.updates.autoCheck !== global.userConfig.updates.autoCheck) {
-            if (global.userConfig.updates.autoCheck && updateCheckInterval === null) {
-              logger.log('Enabling periodic update checks');
-              startPeriodicUpdateChecks();
-            } else if (!global.userConfig.updates.autoCheck && updateCheckInterval !== null) {
-              logger.log('Disabling periodic update checks');
-              clearInterval(updateCheckInterval);
-              updateCheckInterval = null;
-            }
-          }
-          
-          return { success: true, requiresRestart };
-        } else {
-          return { success: false, error: 'Failed to save config file' };
-        }
-      } catch (error) {
-        logger.error('Error saving settings:', error);
-        return { success: false, error: error.message };
-      }
+    initSettingsWindow({
+      info: () => ({
+        productName: packageJson.productName || global.appInfo.name,
+        installType: autoUpdater.installType,
+        sandbox: linuxSandboxStatus,
+        gtkTheme: appAppearance.gtk?.name || null,
+        site: new URL(global.urls.main).hostname,
+        license: packageJson.license,
+        homepage: packageJson.homepage,
+      }),
+      onCheckForUpdates: () => {
+        autoUpdater.setup(config);
+        return autoUpdater.checkForUpdates();
+      },
     });
 
     // Create windows and tray
@@ -1191,7 +931,7 @@ app.whenReady().then(async () => {
       require('dns').lookup('google.com', async (err) => {
         if (err) {
           logger.log('No internet connection, showing not connected message');
-          global.splash.webContents.send('ui:progtext', {
+          splashProgress({
             title: 'No internet connection',
             subtitle: 'Waiting for connection...'
           });
@@ -1207,32 +947,30 @@ app.whenReady().then(async () => {
                 logger.log('Internet connection restored');
                 clearInterval(internetCheckInterval);
 
-                global.splash.webContents.send('ui:progtext', {
+                splashProgress({
                   title: 'Connection restored',
                   subtitle: 'Checking for updates...'
                 });
 
                 // Now proceed with normal startup
                 await performStartup();
+                return;
               }
               checkCount++;
               // After 12 checks (1 minute), show a more prominent message
               if (checkCount === 12) {
-                global.splash.webContents.send('ui:progtext', {
+                splashProgress({
                   title: 'Still no connection',
                   subtitle: 'Please check your network settings.'
                 });
               }
-              // After 60 checks (5 minutes), Stop checking automatically and quit the app
+              // After 60 checks (5 minutes), stop waiting and show the offline page, which
+              // can restart the app once the network is back
               if (checkCount === 60) {
-                logger.log('No internet connection after 5 minutes, quitting app');
-                global.splash.webContents.send('ui:progtext', {
-                  title: 'No connection',
-                  subtitle: 'Quitting the app. Please check your network and restart.'
-                });
-                setTimeout(() => {
-                  app.quit();
-                }, 5000); // Give user time to read message
+                logger.log('No internet connection after 5 minutes, showing the offline page');
+                clearInterval(internetCheckInterval);
+                await loadFirstPage((webContents) => webContents.loadFile(path.join(global.paths.app, 'ui', 'offline.html')));
+                global.revealMainWindow();
               }
             });
           }, 5000); // Check every 5 seconds
@@ -1246,47 +984,44 @@ app.whenReady().then(async () => {
       });
     });
 
-    // check for updates, load extensions and userstyles
+    // check for updates, load extensions and userstyles, then show the main page
     async function performStartup() {
-      try {
-        // Initial update check (if auto-check is enabled)
-        if (global.userConfig.updates.autoCheck) {
-          logger.log('Checking for updates on startup...');
-          await checkForUpdates(false);
-          // Start periodic update checks after initial check
-          startPeriodicUpdateChecks();
-        } else {
-          logger.log('Auto-check for updates is disabled, skipping update check');
-        }
+      logger.log("Initializing Updater");
+      autoUpdater.setup(config);
+      // Downloads and installs an update before the app opens, if there is one
+      const installing = await autoUpdater.startupUpdate().then((result) => result.code === 'installing', (error) => {
+        logger.error(`Error checking for updates: ${error}`);
+        splashProgress({ title: 'Error checking for updates', subtitle: 'Continuing...' });
+        return false;
+      });
+      // The app is about to restart into the new version
+      if (installing) return;
 
-      } catch (error) {
-        logger.error('Error during update check:', error);
-        global.splash.webContents.send('ui:progtext', {
-          title: 'Error checking for updates',
-          subtitle: 'Continuing as normal...'
-        });
-      }
+      await loadExtensions();
 
-      // Continue with extensions and userstyles loading
-      await loadExtensionsAndStyles();
-
-      // Setup page loading handler
-      setupPageLoadHandler();
+      splashProgress({ title: 'Loading app...', subtitle: ' ' });
+      // Shown even if the page hangs, so the splash can't stay up forever
+      const splashTimeout = setTimeout(() => {
+        logger.warn('Splash screen timeout - forcing main window to show');
+        global.revealMainWindow();
+      }, 30000);
+      await loadFirstPage((webContents) => webContents.loadURL(global.urls.main));
+      clearTimeout(splashTimeout);
+      global.revealMainWindow();
     }
 
-    // Extract extensions and styles loading into a separate function
-    async function loadExtensionsAndStyles() {
-      // Load extensions (.crx files, that get unpacked so that we can load them [we can't load .crx directly in electron])
+    // Load extensions (.crx files, that get unpacked so that we can load them [we can't load .crx directly in electron])
+    async function loadExtensions() {
       logger.log("Checking for extensions");
-      global.splash.webContents.send('ui:progtext', { title: 'Checking for extensions', subtitle: ' ' });
+      splashProgress({ title: 'Checking for extensions', subtitle: ' ' });
       const extensions = fs.readdirSync(global.paths.extensions).filter((file) => file.endsWith('.crx'));
 
       if (extensions.length > 0) {
         logger.log(`Unpacking ${extensions.length} extensions and loading them`);
-        global.splash.webContents.send('ui:progtext', { title: `Unpacking ${extensions.length} extensions` });
+        splashProgress({ title: `Unpacking ${extensions.length} extensions` });
         extensions.forEach((extension) => {
           logger.log(`Loading extension: ${extension}`);
-          global.splash.webContents.send('ui:progtext', { title: `Loading extension: ${extension}` });
+          splashProgress({ title: `Loading extension: ${extension}` });
           loadCRX(path.join(global.paths.extensions, extension));
         });
       } else {
@@ -1300,9 +1035,9 @@ app.whenReady().then(async () => {
           const manifestPath = path.join(global.paths.extensions, extension, 'manifest.json');
           if (fs.existsSync(manifestPath)) {
             logger.log(`Loading unpacked extension: ${extension}`);
-            global.splash.webContents.send('ui:progtext', { title: `Loading unpacked extension: ${extension}` });
+            splashProgress({ title: `Loading unpacked extension: ${extension}` });
             try {
-              const { id } = await session.defaultSession.loadExtension(path.join(global.paths.extensions, extension));
+              const { id } = await session.defaultSession.extensions.loadExtension(path.join(global.paths.extensions, extension));
               logger.log(`Extension loaded with ID: ${id}`);
             } catch (error) {
               logger.error(`Failed to load extension: ${error}`);
@@ -1312,84 +1047,6 @@ app.whenReady().then(async () => {
           }
         }
       }
-
-      // Load userstyles
-      logger.log("Checking for userstyles");
-      global.splash.webContents.send('ui:progtext', { title: 'Checking for userstyles' });
-      const userStylesDir = path.join(global.paths.userstyles);
-
-      if (fs.existsSync(userStylesDir)) {
-        const files = fs.readdirSync(userStylesDir).filter((file) => file.endsWith('.css'));
-        if (files.length > 0) {
-          logger.log(`Loading ${files.length} userstyles`);
-          const userStylePromises = files.map(async file => {
-            const cssFile = path.join(userStylesDir, file);
-            try {
-              const cssContent = fs.readFileSync(cssFile, 'utf-8');
-              const result = await userStyles.parseCSS(cssContent);
-
-              logger.info(`Loading userstyle: ${result.metadata.name}`);
-
-              // Compile the userstyle
-              const compiled = await userStyles.compileStyle(result.css, result.metadata);
-
-              // Check if the site 'bsky.app' is defined
-              if (compiled.sites?.['bsky.app']) {
-                // Apply the userstyle to the PageView
-                await global.PageView.webContents.insertCSS(compiled.sites['bsky.app']);
-
-                logger.info(`Applied userstyle: ${result.metadata.name}`);
-                global.splash.webContents.send('ui:progtext', {
-                  title: `Applied userstyle: ${result.metadata.name}`
-                });
-              } else {
-                if (compiled.error) {
-                  logger.warn(`Error loading userstyle: ${compiled.error.message}`);
-                } else {
-                  logger.warn(`Userstyle ${result.metadata.name} does not target 'bsky.app'`);
-                }
-              }
-            } catch (error) {
-              logger.error(`Error loading userstyle: ${file}`, error);
-            }
-          });
-
-          await Promise.all(userStylePromises);
-        }
-      }
-    }
-
-    // Extract page load handler into a separate function
-    function setupPageLoadHandler() {
-      // Timeout to prevent infinite splash screen
-      const splashTimeout = setTimeout(() => {
-        logger.warn('Splash screen timeout - forcing main window to show');
-        global.mainWindow.show();
-        global.splash.destroy();
-        global.mainWindow.focus();
-      }, 30000);
-
-      // Wait for PageView to finish loading
-      const onPageLoaded = () => {
-        clearTimeout(splashTimeout);
-        setTimeout(() => {
-          global.config.runtime.isReady = true;
-          global.mainWindow.show();
-          global.splash.destroy();
-          global.mainWindow.focus();
-        }, 1000);
-      };
-
-      // Check if already loaded, otherwise wait for event
-      if (global.PageView.webContents.isLoading()) {
-        global.PageView.webContents.once('did-finish-load', onPageLoaded);
-      } else {
-        onPageLoaded();
-      }
-
-      // Show the main window
-      global.splash.webContents.send('ui:progtext', { title: 'Loading app...', subtitle: ' ' });
-      global.config.runtime.isReady = true;
     }
   } else {
     logger.log("Failed to get singleInstanceLock, Quitting");
@@ -1406,31 +1063,30 @@ app.on('open-url', (event, url) => {
 // Quit when all windows are closed. Except on macOS.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    if (global.gc) {
-      logger.log('All windows closed, running final GC');
-      global.gc();
-    }
+    logger.log('All windows closed, running final GC');
+    memoryMonitor?.forceGc();
     app.quit();
   }
+});
+
+// macOS: clicking the dock icon brings the window back
+app.on('activate', () => {
+  mainWindowAlive()?.show();
 });
 
 // Add memory cleanup when windows are destroyed
 app.on('browser-window-created', (event, window) => {
   window.on('closed', () => {
-    if (global.gc && Date.now() - lastGcTime > GC_COOLDOWN) {
+    if (Date.now() - lastGcTime > GC_COOLDOWN) {
       logger.debug('Window closed, triggering GC');
-      global.gc();
+      memoryMonitor?.forceGc();
       lastGcTime = Date.now();
     }
   });
 });
 
-// When the app will quit, clear the update check interval and unregister global shortcuts
+// When the app will quit, unregister global shortcuts
 app.on('will-quit', () => {
-  if (updateCheckInterval) {
-    clearInterval(updateCheckInterval);
-    updateCheckInterval = null;
-  }
   globalShortcut.unregisterAll();
 });
 

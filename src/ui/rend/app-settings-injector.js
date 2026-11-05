@@ -98,12 +98,9 @@ function injectAppSettings() {
     appSettingsButton.appendChild(innerContainer);
 
     // Click handler
+    // Opens the app's settings window (src/ui/settings.html)
     appSettingsButton.addEventListener('click', () => {
-        if (window.showAppSettingsModal) {
-            window.showAppSettingsModal();
-        } else {
-            console.error('App settings modal not loaded');
-        }
+        window.ipc.send('settings:open');
     });
 
     // Insert right after the "Add another account" button and before the first divider

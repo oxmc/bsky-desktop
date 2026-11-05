@@ -3,6 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const fs_1 = require("fs");
 const path = require("path");
+
+let window = null;
+let windowReady = false;
+let allowClose = false;
+const windowReadyCallbacks = [];
+
 function loadPackageJson(pkg_path) {
     try {
         return require(pkg_path);
@@ -11,6 +17,7 @@ function loadPackageJson(pkg_path) {
         return null;
     }
 }
+
 function detectPackageJson(specified_dir, app) {
     if (specified_dir) {
         const pkg = loadPackageJson(path.join(specified_dir, 'package.json'));
@@ -41,6 +48,7 @@ function detectPackageJson(specified_dir, app) {
     }
     return null;
 }
+
 function injectInfoFromPackageJson(info, app) {
     const pkg = detectPackageJson(info.package_json_dir, app);
     if (pkg === null) {
@@ -70,6 +78,7 @@ function injectInfoFromPackageJson(info, app) {
     }
     return info;
 }
+
 function normalizeParam(info_or_img_path) {
     if (!info_or_img_path) {
         throw new Error('First parameter of openAboutWindow() must not be empty. Please see the document: https://github.com/rhysd/electron-about-window/blob/master/README.md');
@@ -85,87 +94,141 @@ function normalizeParam(info_or_img_path) {
         return Object.assign({}, info);
     }
 }
-function openAboutWindow(info_or_img_path) {
-    let window = null;
+
+function initAboutWindow(info_or_img_path) {
     let info = normalizeParam(info_or_img_path);
-    const ipc = electron_1.ipcMain !== null && electron_1.ipcMain !== void 0 ? electron_1.ipcMain : info.ipcMain;
-    const app = electron_1.app !== null && electron_1.app !== void 0 ? electron_1.app : info.app;
-    const BrowserWindow = electron_1.BrowserWindow !== null && electron_1.BrowserWindow !== void 0 ? electron_1.BrowserWindow : info.BrowserWindow;
+    const ipc = electron_1.ipcMain ?? info.ipcMain;
+    const app = electron_1.app ?? info.app;
+    const BrowserWindow = electron_1.BrowserWindow ?? info.BrowserWindow;
+
     if (!app || !BrowserWindow || !ipc) {
-        throw new Error("openAboutWindow() is called on non-main process. Set 'app', 'BrowserWindow' and 'ipcMain' properties in the 'info' argument of the function call");
+        throw new Error("initAboutWindow() must be called in the main process.");
     }
-    if (window !== null) {
-        window.focus();
-        return window;
-    }
+
+    if (window !== null) return;
+
     let base_path = info.about_page_dir;
-    if (base_path === undefined || base_path === null || !base_path.length) {
+    if (!base_path || !base_path.length) {
         base_path = path.join(__dirname, '..');
     }
+
+    info = injectInfoFromPackageJson(info, app);
     const index_html = 'file://' + path.join(base_path, 'about.html');
+
     const options = Object.assign({
         width: 400,
         height: 400,
         useContentSize: true,
         titleBarStyle: 'hidden-inset',
-        show: !info.adjust_window_size,
+        show: false,
         icon: info.icon_path,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
         },
     }, info.win_options || {});
-    window = new BrowserWindow(options);
-    const on_win_adjust_req = (_, width, height, show_close_button) => {
-        if (height > 0 && width > 0) {
-            if (show_close_button) {
-                window.setContentSize(width, height + 40);
+
+    const createHiddenWindow = () => {
+        if (window !== null) return;
+
+        window = new BrowserWindow(options);
+
+        const on_win_adjust_req = (_, width, height, show_close_button) => {
+            if (height > 0 && width > 0) {
+                window.setContentSize(width, height + (show_close_button ? 40 : 52));
             }
-            else {
-                window.setContentSize(width, height + 52);
+        };
+
+        const on_win_close_req = () => {
+            if (window) window.hide();
+        };
+
+        ipc.on('about-window:adjust-window-size', on_win_adjust_req);
+        ipc.on('about-window:close-window', on_win_close_req);
+
+        window.on('close', (event) => {
+            if (!allowClose) {
+                event.preventDefault();
+                window.hide();
             }
-        }
-    };
-    const on_win_close_req = () => {
-        window.close();
-    };
-    ipc.on('about-window:adjust-window-size', on_win_adjust_req);
-    ipc.on('about-window:close-window', on_win_close_req);
-    window.once('closed', () => {
-        window = null;
-        ipc.removeListener('about-window:adjust-window-size', on_win_adjust_req);
-        ipc.removeListener('about-window:close-window', on_win_close_req);
-    });
-    window.loadURL(index_html);
-    window.webContents.on('will-navigate', (e, url) => {
-        e.preventDefault();
-        electron_1.shell.openExternal(url);
-    });
-    window.webContents.on('new-window', (e, url) => {
-        e.preventDefault();
-        electron_1.shell.openExternal(url);
-    });
-    window.webContents.once('dom-ready', () => {
-        const win_title = info.win_options ? info.win_options.title : null;
-        delete info.win_options;
-        info.win_options = { title: win_title };
-        const app_name = info.product_name || app.name || app.getName();
-        const version = app.getVersion();
-        window.webContents.send('about-window:info', info, app_name, version);
-        if (info.open_devtools) {
-            if (process.versions.electron >= '1.4') {
+        });
+
+        window.once('closed', () => {
+            ipc.removeListener('about-window:adjust-window-size', on_win_adjust_req);
+            ipc.removeListener('about-window:close-window', on_win_close_req);
+
+            window = null;
+            windowReady = false;
+            allowClose = false;
+        });
+
+        // On app quit, allow the window to close properly
+        app.on('before-quit', () => {
+            if (window) {
+                allowClose = true;
+                window.close();
+            }
+        });
+
+        window.webContents.on('will-navigate', (e, url) => {
+            e.preventDefault();
+            electron_1.shell.openExternal(url);
+        });
+
+        window.webContents.on('new-window', (e, url) => {
+            e.preventDefault();
+            electron_1.shell.openExternal(url);
+        });
+
+        window.loadURL(index_html);
+
+        window.webContents.once('dom-ready', () => {
+            const app_name = info.product_name || app.name || app.getName();
+            const version = app.getVersion();
+
+            // Match old behavior here
+            const win_title = info.win_options ? info.win_options.title : null;
+            info.win_options = { title: win_title };
+
+            window.webContents.send('about-window:info', info, app_name, version);
+            if (info.open_devtools) {
                 window.webContents.openDevTools({ mode: 'detach' });
             }
-            else {
-                window.webContents.openDevTools();
-            }
-        }
-    });
-    window.once('ready-to-show', () => {
-        window.show();
-    });
-    window.setMenu(null);
-    info = injectInfoFromPackageJson(info, app);
-    return window;
+
+            // window is ready
+            windowReady = true;
+            for (const cb of windowReadyCallbacks) cb();
+            windowReadyCallbacks.length = 0;
+        });
+
+        window.setMenu(null);
+    };
+
+    if (app.isReady()) {
+        createHiddenWindow();
+    } else {
+        app.once('ready', createHiddenWindow);
+    }
 }
-exports.default = openAboutWindow;
+
+function openAboutWindow() {
+    if (window && windowReady) {
+        window.show();
+        window.focus();
+    } else {
+        windowReadyCallbacks.push(() => {
+            if (window) {
+                window.show();
+                window.focus();
+            }
+        });
+    }
+}
+
+module.exports = {
+    initAboutWindow,
+    openAboutWindow,
+    get aboutWindow() {
+        return window;
+    }
+};

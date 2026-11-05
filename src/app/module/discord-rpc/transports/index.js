@@ -1,6 +1,7 @@
 'use strict';
 
+// Loaded on first use: the websocket transport needs the optional 'ws' package
 module.exports = {
-  ipc: require('./ipc'),
-  websocket: require('./websocket'),
+  get ipc() { return require('./ipc'); },
+  get websocket() { return require('./websocket'); },
 };

@@ -52,6 +52,12 @@ exports.default = () => {
     }
   });
   _get__("electron_1").ipcMain.on('update-window-controls', (event, args) => {
+    // No native overlay controls on Linux (they don't render on the transparent, rounded
+    // main window), so keep the titlebar's own HTML controls there.
+    if (process.platform === 'linux') {
+      event.returnValue = false;
+      return;
+    }
     const window = _get__("electron_1").BrowserWindow.fromWebContents(event.sender);
     try {
       if (window) window.setTitleBarOverlay(args);

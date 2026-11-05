@@ -17,17 +17,15 @@
     },
     "license": "AGPL-3.0-only",
     "devDependencies": {
-        "electron": "^41.1.1",
+        "electron": "^43.0.0",
         "electron-builder": "^26.8.1"
     },
     "dependencies": {
         "@electron/asar": "^3.4.1",
         "@electron/remote": "^2.1.2",
-        "@oxmc/node-gpuinfo": "^1.0.2",
         "@oxmc/node-smbios": "^1.0.1",
         "adm-zip": "^0.5.12",
         "axios": "^1.8.2",
-        "detect-rpi": "github:oxmc/detect-rpi",
         "electron-updater": "^6.6.2",
         "less": "^4.2.1",
         "log4js": "^6.9.1",
@@ -35,6 +33,17 @@
         "semver": "^7.6.3",
         "stylus": "^0.64.0",
         "usercss-meta": "^0.12.0",
-        "v8-compile-cache": "^2.3.0"
+        "v8-compile-cache": "^2.3.0",
+        "electron-performance": "git+https://git.oxmc.me/oxmc/electron-performance.git",
+        "js-yaml": "^4.1.0"
+    },
+    "optionalDependencies": {
+        "winreg": "^1.2.5"
+    },
+    "allowScripts": {
+        "@oxmc/node-smbios": true,
+        "@oxmc/node-gpuinfo": true,
+        "electron": true,
+        "electron-winstaller": true
     }
 }

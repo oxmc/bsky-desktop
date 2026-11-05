@@ -2,6 +2,7 @@ export interface LicenseEntry {
     type: string;
     url: string;
 }
+
 export interface PackageJson {
     productName?: string;
     description?: string;
@@ -11,6 +12,7 @@ export interface PackageJson {
         url: string;
     };
 }
+
 export interface AboutWindowInfo {
     icon_path: string;
     product_name?: string;
@@ -33,4 +35,15 @@ export interface AboutWindowInfo {
     BrowserWindow?: typeof Electron.BrowserWindow;
     ipcMain?: Electron.IpcMain;
 }
-export default function openAboutWindow(info_or_img_path: AboutWindowInfo | string): Electron.BrowserWindow;
+
+/**
+ * Initializes (but does not show) the about window.
+ * Must be called before `openAboutWindow`.
+ */
+export function initAboutWindow(info_or_img_path: AboutWindowInfo | string): void;
+
+/**
+ * Displays the previously-initialized about window.
+ * Throws if the window hasn't been initialized.
+ */
+export function openAboutWindow(): Electron.BrowserWindow;

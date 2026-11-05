@@ -2,7 +2,6 @@
 
 const EventEmitter = require('events');
 const { setTimeout, clearTimeout } = require('timers');
-const fetch = require('node-fetch');
 const transports = require('./transports');
 const { RPCCommands, RPCEvents, RelationshipTypes } = require('./constants');
 const { pid: getPid, uuid } = require('./util');
@@ -518,6 +517,10 @@ class RPCClient extends EventEmitter {
     return this.request(RPCCommands.SET_ACTIVITY, {
       pid,
       activity: {
+        // 0 Playing, 2 Listening, 3 Watching, 5 Competing
+        type: args.type,
+        // which field the member list shows: 0 app name, 1 state, 2 details
+        status_display_type: args.statusDisplayType,
         state: args.state,
         details: args.details,
         timestamps,

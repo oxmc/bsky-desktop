@@ -34,29 +34,19 @@ jobs:
       - name: Build (armv7l)
         run: npm run build -- --arch armv7l
 
+      # The updater asks for latest-linux.yml (x64), latest-linux-arm64.yml and, on armv7l
+      # where Node reports the arch as "arm", latest-linux-arm.yml
       - name: Rename yml (armv7l)
         run: |
-          if [ -f dist/latest-linux.yml ]; then
-            mv dist/latest-linux.yml dist/latest-linux-armv7l.yml
+          if [ -f dist/latest-linux-armv7l.yml ]; then
+            mv dist/latest-linux-armv7l.yml dist/latest-linux-arm.yml
           fi
 
       - name: Build (x64)
         run: npm run build -- --arch x64
 
-      - name: Rename yml (x64)
-        run: |
-          if [ -f dist/latest-linux.yml ]; then
-            mv dist/latest-linux.yml dist/latest-linux-x64.yml
-          fi
-
       - name: Build (arm64)
         run: npm run build -- --arch arm64
-
-      - name: Rename yml (arm64)
-        run: |
-          if [ -f dist/latest-linux.yml ]; then
-            mv dist/latest-linux.yml dist/latest-linux-arm64.yml
-          fi
 
       - name: Download appimagelint and its deps
         run: |
@@ -184,6 +174,18 @@ jobs:
           if [ -f dist/latest-mac.yml ]; then
             mv dist/latest-mac.yml dist/latest-mac-arm64.yml
           fi
+
+      # The updater on macOS reads latest-mac.yml and picks the arm64 or x64 zip from it
+      - name: Merge macOS update feeds
+        run: |
+          node -e '
+            const fs = require("fs");
+            const yaml = require("js-yaml");
+            const x64 = yaml.load(fs.readFileSync("dist/latest-mac-x64.yml", "utf8"));
+            const arm64 = yaml.load(fs.readFileSync("dist/latest-mac-arm64.yml", "utf8"));
+            const merged = { ...x64, files: [...x64.files, ...arm64.files] };
+            fs.writeFileSync("dist/latest-mac.yml", yaml.dump(merged, { lineWidth: -1 }));
+          '
       
       - name: Generate checksum
         run: |

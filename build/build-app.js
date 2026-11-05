@@ -1,6 +1,41 @@
-const path = require('path');
-const process = require('process');
 const builder = require('electron-builder');
+const process = require('process');
+const path = require('path');
+const fs = require('fs');
+
+const { Platform, Arch } = builder;
+
+// electron-builder doesn't list zip artifacts in latest-*.yml; add them so portable zip
+// installs (src/app/module/updater/zipUpdater.js) can find and verify their update.
+function addZipsToUpdateInfo(artifacts) {
+    const yaml = require('js-yaml');
+    const crypto = require('crypto');
+    const zips = artifacts.filter((file) => file.endsWith('.zip'));
+
+    for (const zip of zips) {
+        const dir = path.dirname(zip);
+        const zipArch = (zip.match(/-(x64|arm64|armv7l|ia32|universal)\.zip$/) || [])[1];
+        const zipPlatform = (zip.match(/-(linux|win|mac)-[^-]+\.zip$/) || [])[1];
+        const ymlName = {
+            linux: `latest-linux${zipArch && zipArch !== 'x64' ? `-${zipArch}` : ''}.yml`,
+            mac: 'latest-mac.yml',
+            win: 'latest.yml',
+        }[zipPlatform];
+        const ymlPath = ymlName && path.join(dir, ymlName);
+        if (!ymlPath || !fs.existsSync(ymlPath)) continue;
+
+        const info = yaml.load(fs.readFileSync(ymlPath, 'utf8'));
+        const url = path.basename(zip);
+        info.files = (info.files || []).filter((f) => f.url !== url);
+        info.files.push({
+            url,
+            sha512: crypto.createHash('sha512').update(fs.readFileSync(zip)).digest('base64'),
+            size: fs.statSync(zip).size,
+        });
+        fs.writeFileSync(ymlPath, yaml.dump(info, { lineWidth: -1 }));
+        console.log(`Added ${url} to ${ymlName}`);
+    }
+}
 
 // Parse command-line arguments
 const supportedPlatforms = ['win', 'mac', 'linux'];
@@ -31,19 +66,24 @@ if (!supportedArchitectures.includes(arch)) {
     process.exit(1);
 }
 
+if (arch === 'universal' && platform !== 'mac') {
+    console.error(`'universal' architecture is only supported on macOS platform.`);
+    process.exit(1);
+}
+
 // Map platform and architecture to electron-builder enums
 const platformEnum = {
-    win: builder.Platform.WINDOWS,
-    mac: builder.Platform.MAC,
-    linux: builder.Platform.LINUX
+    win: Platform.WINDOWS,
+    mac: Platform.MAC,
+    linux: Platform.LINUX
 }[platform];
 
 const archEnum = {
-    x64: builder.Arch.x64,
-    armv7l: builder.Arch.armv7l,
-    arm64: builder.Arch.arm64,
-    ia32: builder.Arch.ia32,
-    universal: builder.Arch.universal
+    x64: Arch.x64,
+    armv7l: Arch.armv7l,
+    arm64: Arch.arm64,
+    ia32: Arch.ia32,
+    universal: Arch.universal
 }[arch];
 
 // Additional build arguments: (starting with --eb-)
@@ -81,7 +121,7 @@ const defaultBuildConfig = {
 const buildConfigPath = path.join(__dirname, 'build-config.json');
 let buildConfig = defaultBuildConfig;
 if (!nobc) {
-    if (!require('fs').existsSync(buildConfigPath)) {
+    if (!fs.existsSync(buildConfigPath)) {
         console.error('build-config.json not found');
         process.exit(1);
     }
@@ -118,11 +158,16 @@ const options = {
 };
 
 // Build process
+const targets = (arch === 'universal')
+    ? platformEnum.createTarget()  // let electron-builder decide universal handling
+    : platformEnum.createTarget(null, archEnum);
+
 builder.build({
-    targets: platformEnum.createTarget(null, archEnum),
+    targets,
     config: options
 }).then(result => {
     console.log("Build completed:", JSON.stringify(result, null, 2));
+    addZipsToUpdateInfo(result);
 }).catch(error => {
     console.error("Build failed:", error);
 });
