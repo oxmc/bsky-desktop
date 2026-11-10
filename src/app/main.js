@@ -529,7 +529,9 @@ function createWindow() {
   splash.show();
 
   logger.log("Attaching Titlebar to Main Window");
-  attachTitlebarToWindow(titlebarWindow);
+  attachTitlebarToWindow(mainWindow, titlebarWindow);
+  // attachTitlebarToWindow lowers the minimum size to its own defaults; keep ours
+  mainWindow.setMinimumSize(800, 600);
 
   // DevTools:
   //splash.webContents.openDevTools();
